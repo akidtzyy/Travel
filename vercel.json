@@ -1,0 +1,14 @@
+{
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ],
+  "env": {
+    "NEXT_PUBLIC_SUPABASE_URL": "https://ubocjieocxxxgysxdfwk.supabase.co",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_iHqc-PzNaKYkIoZp7KFf9w_wFr11EMx",
+    "VITE_SUPABASE_URL": "https://ubocjieocxxxgysxdfwk.supabase.co",
+    "VITE_SUPABASE_ANON_KEY": "sb_publishable_iHqc-PzNaKYkIoZp7KFf9w_wFr11EMx"
+  }
+}

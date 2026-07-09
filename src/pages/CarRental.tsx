@@ -1,0 +1,469 @@
+import { useState, useEffect, useMemo } from 'react';
+import { motion } from 'framer-motion';
+import { Car, Users, Clock, CheckCircle, Send, ArrowLeft, Fuel, Settings } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import supabase from '../lib/supabase'; // <--- Tambahkan import supabase client yang benar
+
+interface CarRental {
+  id: number;
+  name: string;
+  type: string;
+  price: number;
+  duration_desc: string;
+  seats: number;
+  image_url: string;
+  category: string;
+  features: string[];
+}
+
+export default function CarRentalPage() {
+  const [cars, setCars] = useState<CarRental[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'self_drive' | 'with_driver'>('self_drive');
+  const [bookingForm, setBookingForm] = useState({
+    name: '', email: '', phone: '', item_name: '', booking_type: 'car', date: '', duration: '', notes: '', total_price: ''
+  });
+  const [bookingSuccess, setBookingSuccess] = useState(false);
+  const [bookingLoading, setBookingLoading] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [selectedCarId, setSelectedCarId] = useState<number | ''>('');
+
+  useEffect(() => {
+    const loadCars = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('car_rentals')
+          .select('*')
+          .order('price', { ascending: true });
+        if (error) throw error;
+        if (data) setCars(data);
+      } catch (err) {
+        console.error('Error loading cars:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadCars();
+  }, []);
+
+  const formatPrice = (price: number) => {
+    return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(price);
+  };
+
+  const filteredCars = cars.filter(c => c.type === activeTab);
+  const selectedCar = useMemo(() => cars.find(c => c.id === selectedCarId), [cars, selectedCarId]);
+
+  // Auto-fill form when car is selected
+  useEffect(() => {
+    if (selectedCar) {
+      setBookingForm(prev => ({
+        ...prev,
+        item_name: `${selectedCar.name} (${selectedCar.type === 'self_drive' ? 'Self Drive' : 'With Driver'})`,
+        total_price: formatPrice(selectedCar.price),
+      }));
+    }
+  }, [selectedCar]);
+
+  const handleBooking = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // Format pesan WhatsApp
+    const message = `*BOOKING SEWA MOBIL - ClickAndGo Journey*%0A%0A` +
+      `*Kendaraan:* ${bookingForm.item_name}%0A` +
+      `*Durasi Sewa:* ${bookingForm.duration || 'Belum ditentukan'}%0A` +
+      `*Harga:* ${bookingForm.total_price}%0A%0A` +
+      `*Data Pemesan:*%0A` +
+      `Nama: ${bookingForm.name}%0A` +
+      `Email: ${bookingForm.email}%0A` +
+      `WhatsApp: ${bookingForm.phone}%0A` +
+      `Tanggal Sewa: ${bookingForm.date}%0A%0A` +
+      `${bookingForm.notes ? `*Catatan:*%0A${bookingForm.notes}%0A%0A` : ''}` +
+      `Mohon informasi lebih lanjut. Terima kasih!`;
+    
+    // Nomor WhatsApp admin (ganti dengan nomor Anda)
+    const whatsappNumber = '6281234567890'; // Format: 62xxx (tanpa + atau 0)
+    
+    // Redirect ke WhatsApp
+    window.open(`https://wa.me/${whatsappNumber}?text=${message}`, '_blank');
+    
+    // Reset form
+    setBookingForm({ name: '', email: '', phone: '', item_name: '', booking_type: 'car', date: '', duration: '', notes: '', total_price: '' });
+    setSelectedCarId('');
+    setBookingSuccess(true);
+    setTimeout(() => setBookingSuccess(false), 5000);
+  };
+
+  const selectCar = (car: CarRental) => {
+    setActiveTab(car.type as 'self_drive' | 'with_driver');
+    setSelectedCarId(car.id);
+    setShowForm(true);
+    setTimeout(() => document.getElementById('car-booking-form')?.scrollIntoView({ behavior: 'smooth' }), 100);
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-ocean-50 pt-20">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-toska-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-ocean-600 font-medium">Memuat data armada...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white min-h-screen">
+      {/* Hero */}
+      <section className="relative pt-24 pb-16 bg-gradient-to-br from-ocean-900 via-ocean-800 to-ocean-900 overflow-hidden">
+        <div className="absolute inset-0 opacity-10">
+          <div className="absolute top-20 left-10 w-72 h-72 bg-toska-500 rounded-full blur-3xl" />
+          <div className="absolute bottom-10 right-10 w-96 h-96 bg-ocean-400 rounded-full blur-3xl" />
+        </div>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+          <Link to="/" className="inline-flex items-center gap-2 text-ocean-300 hover:text-white transition-colors mb-8">
+            <ArrowLeft className="w-4 h-4" />
+            <span className="text-sm">Kembali ke Beranda</span>
+          </Link>
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 bg-toska-500/20 rounded-xl flex items-center justify-center">
+                <Car className="w-6 h-6 text-toska-400" />
+              </div>
+              <span className="text-toska-400 font-semibold text-sm uppercase tracking-wider">Sewa Mobil Bali</span>
+            </div>
+            <h1 className="text-4xl sm:text-5xl font-bold text-white font-[family-name:var(--font-display)] mb-4">
+              Armada Lengkap untuk
+              <br />
+              <span className="text-toska-400">Perjalanan Anda</span>
+            </h1>
+            <p className="text-ocean-200 text-lg max-w-2xl">
+              Pilihan kendaraan terbaik dari city car hingga bus besar. Tersedia option self drive atau dengan driver profesional yang mengenal Bali dengan baik.
+            </p>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* Tab Switcher */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 relative z-20">
+        <div className="bg-white rounded-2xl shadow-xl border border-ocean-100 p-2 inline-flex gap-2">
+          <button
+            onClick={() => { setActiveTab('self_drive'); setSelectedCarId(''); }}
+            className={`flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm transition-all ${
+              activeTab === 'self_drive'
+                ? 'bg-toska-500 text-white shadow-lg shadow-toska-500/25'
+                : 'text-ocean-600 hover:bg-ocean-50'
+            }`}
+          >
+            <Settings className="w-4 h-4" />
+            Self Drive
+          </button>
+          <button
+            onClick={() => { setActiveTab('with_driver'); setSelectedCarId(''); }}
+            className={`flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm transition-all ${
+              activeTab === 'with_driver'
+                ? 'bg-toska-500 text-white shadow-lg shadow-toska-500/25'
+                : 'text-ocean-600 hover:bg-ocean-50'
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            With Driver
+          </button>
+        </div>
+      </section>
+
+      {/* Car Grid */}
+      <section className="py-16">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {filteredCars.map((car, i) => (
+              <motion.div
+                key={car.id}
+                initial={{ opacity: 0, y: 30 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: i * 0.05 }}
+                className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 border border-ocean-100 group"
+              >
+                <div className="relative h-44 bg-gradient-to-br from-ocean-50 to-sand-50 flex items-center justify-center overflow-hidden">
+                  {car.image_url ? (
+                    <img src={car.image_url} alt={car.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                  ) : (
+                    <Car className="w-20 h-20 text-ocean-200 group-hover:text-toska-300 transition-colors" />
+                  )}
+                  <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-sm px-3 py-1 rounded-full text-xs font-semibold text-ocean-800 flex items-center gap-1">
+                    <Users className="w-3 h-3" /> {car.seats} Seat
+                  </div>
+                </div>
+                <div className="p-5">
+                  <h3 className="text-lg font-bold text-ocean-900 mb-1 font-[family-name:var(--font-display)]">{car.name}</h3>
+                  <p className="text-ocean-500 text-xs mb-3">{car.category}</p>
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="flex items-center gap-1 text-ocean-600 text-xs">
+                      <Clock className="w-3.5 h-3.5" />
+                      {car.duration_desc}
+                    </div>
+                    <div className="flex items-center gap-1 text-ocean-600 text-xs">
+                      <Fuel className="w-3.5 h-3.5" />
+                      BBM Termasuk
+                    </div>
+                  </div>
+                  {car.features && car.features.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mb-4">
+                      {car.features.slice(0, 3).map((f, j) => (
+                        <span key={j} className="bg-ocean-50 text-ocean-600 text-xs px-2 py-0.5 rounded-full">{f}</span>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between pt-4 border-t border-ocean-100">
+                    <div>
+                      <p className="text-xl font-bold text-toska-600">{formatPrice(car.price)}</p>
+                      <p className="text-xs text-ocean-500">{car.duration_desc}</p>
+                    </div>
+                    <button
+                      onClick={() => selectCar(car)}
+                      className="bg-ocean-900 hover:bg-ocean-800 text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-all hover:shadow-lg"
+                    >
+                      Pesan
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Info Cards */}
+      <section className="py-12 bg-ocean-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {[
+              { title: 'Self Drive', desc: 'Bawa mobil sendiri dengan syarat KTP/SIM dan deposit. Antar-jemput area Kuta, Seminyak, dan Nusa Dua.', icon: Settings },
+              { title: 'With Driver', desc: 'Driver profesional yang ramah dan menguasai seluruh rute wisata Bali. Termasuk BBM dan air mineral.', icon: Users },
+              { title: 'Syarat & Ketentuan', desc: 'Booking minimal H-1. Pembatalan H-3 full refund. Overtime charge 10% per jam dari harga sewa.', icon: CheckCircle },
+            ].map((item, i) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: i * 0.1 }}
+                className="bg-white rounded-2xl p-6 border border-ocean-100"
+              >
+                <item.icon className="w-8 h-8 text-toska-500 mb-3" />
+                <h3 className="font-bold text-ocean-900 mb-2">{item.title}</h3>
+                <p className="text-ocean-600 text-sm leading-relaxed">{item.desc}</p>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Booking Form */}
+      {showForm && (
+        <section id="car-booking-form" className="py-16 bg-white">
+          <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="text-center mb-12">
+              <span className="text-toska-500 font-semibold text-sm uppercase tracking-wider">Reservasi</span>
+              <h2 className="text-3xl sm:text-4xl font-bold text-ocean-900 font-[family-name:var(--font-display)] mt-2 mb-4">
+                Booking Sewa Mobil
+              </h2>
+              <p className="text-ocean-600">
+                Pilih tipe sewa dan kendaraan yang Anda inginkan, lalu lengkapi data diri. Tim kami akan segera menghubungi Anda.
+              </p>
+            </div>
+
+            {bookingSuccess && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-green-50 border border-green-200 text-green-800 rounded-xl p-4 mb-6 flex items-center gap-3"
+              >
+                <CheckCircle className="w-5 h-5 text-green-500 shrink-0" />
+                <span className="text-sm font-medium">Booking berhasil dikirim! Tim kami akan menghubungi Anda dalam 1x24 jam.</span>
+              </motion.div>
+            )}
+
+            <form onSubmit={handleBooking} className="bg-ocean-50 rounded-2xl p-8 border border-ocean-100">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                {/* Nama */}
+                <div>
+                  <label className="block text-sm font-medium text-ocean-800 mb-1.5">Nama Lengkap *</label>
+                  <input
+                    type="text"
+                    required
+                    value={bookingForm.name}
+                    onChange={e => setBookingForm(p => ({ ...p, name: e.target.value }))}
+                    className="w-full px-4 py-3 rounded-xl border border-ocean-200 bg-white focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm"
+                    placeholder="Nama Anda"
+                  />
+                </div>
+                {/* Email */}
+                <div>
+                  <label className="block text-sm font-medium text-ocean-800 mb-1.5">Email *</label>
+                  <input
+                    type="email"
+                    required
+                    value={bookingForm.email}
+                    onChange={e => setBookingForm(p => ({ ...p, email: e.target.value }))}
+                    className="w-full px-4 py-3 rounded-xl border border-ocean-200 bg-white focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm"
+                    placeholder="email@contoh.com"
+                  />
+                </div>
+                {/* WhatsApp */}
+                <div>
+                  <label className="block text-sm font-medium text-ocean-800 mb-1.5">No. WhatsApp *</label>
+                  <input
+                    type="tel"
+                    required
+                    pattern="[0-9]*"
+                    inputMode="numeric"
+                    value={bookingForm.phone}
+                    onChange={e => {
+                      const value = e.target.value.replace(/[^0-9]/g, '');
+                      setBookingForm(p => ({ ...p, phone: value }));
+                    }}
+                    onKeyDown={e => {
+                      // Allow: backspace, delete, tab, escape, enter, arrows
+                      if ([8, 9, 27, 13, 46, 37, 39].includes(e.keyCode) ||
+                          // Allow Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+X
+                          (e.ctrlKey && [65, 67, 86, 88].includes(e.keyCode))) {
+                        return;
+                      }
+                      // Block non-numeric keys
+                      if ((e.keyCode < 48 || e.keyCode > 57) && // number keys
+                          (e.keyCode < 96 || e.keyCode > 105)) { // numpad keys
+                        e.preventDefault();
+                      }
+                    }}
+                    className="w-full px-4 py-3 rounded-xl border border-ocean-200 bg-white focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm"
+                    placeholder="08xxxxxxxxxx"
+                  />
+                  <p className="text-xs text-ocean-500 mt-1">Hanya angka yang diperbolehkan</p>
+                </div>
+                {/* Tanggal */}
+                <div>
+                  <label className="block text-sm font-medium text-ocean-800 mb-1.5">Tanggal Sewa *</label>
+                  <input
+                    type="date"
+                    required
+                    value={bookingForm.date}
+                    onChange={e => setBookingForm(p => ({ ...p, date: e.target.value }))}
+                    className="w-full px-4 py-3 rounded-xl border border-ocean-200 bg-white focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm"
+                  />
+                </div>
+
+                {/* Tipe Sewa */}
+                <div className="sm:col-span-2">
+                  <label className="block text-sm font-medium text-ocean-800 mb-1.5">Tipe Sewa *</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => { setActiveTab('self_drive'); setSelectedCarId(''); }}
+                      className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold transition-all border ${
+                        activeTab === 'self_drive'
+                          ? 'bg-toska-500 text-white border-toska-500 shadow-md'
+                          : 'bg-white text-ocean-700 border-ocean-200 hover:border-toska-300'
+                      }`}
+                    >
+                      🔑 Self Drive
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setActiveTab('with_driver'); setSelectedCarId(''); }}
+                      className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold transition-all border ${
+                        activeTab === 'with_driver'
+                          ? 'bg-toska-500 text-white border-toska-500 shadow-md'
+                          : 'bg-white text-ocean-700 border-ocean-200 hover:border-toska-300'
+                      }`}
+                    >
+                      👤 With Driver
+                    </button>
+                  </div>
+                </div>
+
+                {/* Pilih Kendaraan */}
+                <div className="sm:col-span-2">
+                  <label className="block text-sm font-medium text-ocean-800 mb-1.5">Pilih Kendaraan *</label>
+                  <select
+                    required
+                    value={selectedCarId}
+                    onChange={e => setSelectedCarId(e.target.value ? Number(e.target.value) : '')}
+                    className="w-full px-4 py-3 rounded-xl border border-ocean-200 bg-white focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm"
+                  >
+                    <option value="">— Pilih kendaraan —</option>
+                    {filteredCars.map(car => (
+                      <option key={car.id} value={car.id}>
+                        {car.name} ({car.seats} Seat) — {formatPrice(car.price)} / {car.duration_desc}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Durasi Sewa & Price Summary */}
+                {selectedCar && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-ocean-800 mb-1.5">Durasi Sewa</label>
+                      <input
+                        type="text"
+                        value={bookingForm.duration}
+                        onChange={e => setBookingForm(p => ({ ...p, duration: e.target.value }))}
+                        className="w-full px-4 py-3 rounded-xl border border-ocean-200 bg-white focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm"
+                        placeholder="Contoh: 2 hari"
+                      />
+                    </div>
+
+                    {/* Price Summary */}
+                    <div className="bg-toska-50 border border-toska-200 rounded-xl p-4 flex items-center justify-between">
+                      <div>
+                        <p className="text-xs text-toska-700 font-medium">{selectedCar.name}</p>
+                        <p className="text-xs text-toska-600">{selectedCar.seats} Seat · {selectedCar.duration_desc}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xl font-bold text-toska-700">{formatPrice(selectedCar.price)}</p>
+                        <p className="text-xs text-toska-600">{selectedCar.duration_desc}</p>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* Catatan */}
+                <div className="sm:col-span-2">
+                  <label className="block text-sm font-medium text-ocean-800 mb-1.5">Catatan Tambahan</label>
+                  <textarea
+                    rows={3}
+                    value={bookingForm.notes}
+                    onChange={e => setBookingForm(p => ({ ...p, notes: e.target.value }))}
+                    className="w-full px-4 py-3 rounded-xl border border-ocean-200 bg-white focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm resize-none"
+                    placeholder="Lokasi penjemputan, waktu, permintaan khusus, dll."
+                  />
+                </div>
+              </div>
+              <button
+                type="submit"
+                disabled={bookingLoading}
+                className="w-full mt-6 bg-toska-500 hover:bg-toska-600 disabled:bg-toska-300 text-white py-4 rounded-xl font-semibold text-lg transition-all hover:shadow-lg hover:shadow-toska-500/25 flex items-center justify-center gap-2"
+              >
+                {bookingLoading ? (
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <>
+                    <Send className="w-5 h-5" />
+                    Kirim Pemesanan
+                  </>
+                )}
+              </button>
+            </form>
+          </div>
+        </section>
+      )}
+
+      {/* Footer */}
+      <footer className="bg-ocean-900 text-white py-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <p className="text-ocean-400 text-sm">© 2025 ClickAndGo Journey. All rights reserved.</p>
+        </div>
+      </footer>
+    </div>
+  );
+}
