@@ -107,10 +107,10 @@ export default function PackageCard({ pkg, index, onSelect }: PackageCardProps) 
         </div>
       </div>
 
-      <div className="p-6">
+      <div className="p-7">
         {/* Highlights */}
-        <div className="mb-5">
-          <p className="text-xs font-bold text-ocean-800 uppercase tracking-wider mb-2">Destinasi</p>
+        <div className="mb-6">
+          <p className="text-xs font-bold text-ocean-800 uppercase tracking-wider mb-3">Destinasi</p>
           <div className="flex flex-wrap gap-1.5">
             {pkg.highlights?.slice(0, 6).map((h, j) => (
               <span key={j} className={`text-xs px-3 py-1 rounded-full font-medium ${
@@ -128,7 +128,7 @@ export default function PackageCard({ pkg, index, onSelect }: PackageCardProps) 
         {/* Itinerary Toggle */}
         <button
           onClick={() => setShowItinerary(!showItinerary)}
-          className="w-full flex items-center justify-between bg-ocean-50 hover:bg-ocean-100 transition-colors rounded-xl px-5 py-3 mb-3"
+          className="w-full flex items-center justify-between bg-ocean-50 hover:bg-ocean-100 transition-colors rounded-xl px-5 py-3.5 mb-4"
         >
           <span className="flex items-center gap-2 text-sm font-semibold text-ocean-800">
             <Calendar className="w-4 h-4 text-toska-500" />
@@ -148,12 +148,12 @@ export default function PackageCard({ pkg, index, onSelect }: PackageCardProps) 
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
               exit={{ opacity: 0, height: 0 }}
-              className="overflow-hidden mb-3"
+              className="overflow-hidden mb-4"
             >
               <div className="space-y-4">
                 {pkg.included?.itinerary?.map((day) => (
                   <div key={day.day} className={`border-l-2 pl-4 ${isHoneymoon ? 'border-pink-300' : 'border-toska-300'}`}>
-                    <h4 className="text-sm font-bold text-ocean-900 mb-2">{day.title}</h4>
+                    <h4 className="text-sm font-bold text-ocean-900 mb-2.5">{day.title}</h4>
                     <ul className="space-y-1">
                       {day.activities?.map((act, i) => (
                         <li key={i} className="flex items-start gap-2 text-sm text-ocean-600">
@@ -174,7 +174,7 @@ export default function PackageCard({ pkg, index, onSelect }: PackageCardProps) 
           <>
             <button
               onClick={() => setShowDetails(!showDetails)}
-              className="w-full flex items-center justify-between bg-sand-100 hover:bg-sand-200 transition-colors rounded-xl px-5 py-3 mb-3"
+              className="w-full flex items-center justify-between bg-sand-100 hover:bg-sand-200 transition-colors rounded-xl px-5 py-3.5 mb-4"
             >
               <span className="flex items-center gap-2 text-sm font-semibold text-ocean-800">
                 <Sparkles className="w-4 h-4 text-pink-500" />
@@ -192,7 +192,7 @@ export default function PackageCard({ pkg, index, onSelect }: PackageCardProps) 
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: 'auto' }}
                   exit={{ opacity: 0, height: 0 }}
-                  className="overflow-hidden mb-3"
+                  className="overflow-hidden mb-4"
                 >
                   {pkg.included.includes_list && (
                     <div className="mb-4">
@@ -231,8 +231,8 @@ export default function PackageCard({ pkg, index, onSelect }: PackageCardProps) 
         )}
 
         {/* Hotel Tabs & Pricing Section */}
-        <div className="mb-6">
-          <p className="text-xs font-bold text-ocean-800 uppercase tracking-wider mb-2 flex items-center gap-1">
+        <div className="mb-7">
+          <p className="text-xs font-bold text-ocean-800 uppercase tracking-wider mb-3 flex items-center gap-1">
             <Hotel className={`w-3.5 h-3.5 ${isHoneymoon ? 'text-pink-500' : 'text-toska-500'}`} /> 
             {isHoneymoon ? 'Pilihan Hotel (Harga per Couple)' : 'Pilihan Hotel'}
           </p>
@@ -240,7 +240,7 @@ export default function PackageCard({ pkg, index, onSelect }: PackageCardProps) 
           {usePaxPricing ? (
             <>
               {/* Regular: Tabs per hotel, grid of pax prices */}
-              <div className="flex flex-wrap gap-2 mb-4">
+              <div className="flex flex-wrap gap-2 mb-5">
                 {pkg.included?.hotels?.map((h, i) => (
                   <button
                     key={i}
@@ -315,7 +315,7 @@ export default function PackageCard({ pkg, index, onSelect }: PackageCardProps) 
         </div>
 
         {/* Starting Price & CTA */}
-        <div className="flex items-center justify-between pt-5 border-t border-ocean-100">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-6 border-t border-ocean-100">
           <div>
             <p className="text-xs text-ocean-500">Mulai dari</p>
             <p className="text-2xl font-bold text-toska-600 font-[family-name:var(--font-display)]">{formatPrice(lowestPrice)}</p>
@@ -333,7 +333,7 @@ export default function PackageCard({ pkg, index, onSelect }: PackageCardProps) 
                 onSelect(pkg, firstHotel?.hotel || 'Standard Hotel', '1 Couple', lowestPrice);
               }
             }}
-            className={`px-6 py-3 rounded-xl text-sm font-bold transition-all hover:shadow-lg flex items-center gap-2 text-white ${
+            className={`w-full sm:w-auto justify-center px-6 py-3 rounded-xl text-sm font-bold transition-all hover:shadow-lg flex items-center gap-2 text-white ${
               isHoneymoon 
                 ? 'bg-pink-500 hover:bg-pink-600 hover:shadow-pink-500/25' 
                 : 'bg-toska-500 hover:bg-toska-600 hover:shadow-toska-500/25'
