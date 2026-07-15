@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Car, Users, Clock, CheckCircle, Send, ArrowLeft, Fuel, Settings } from 'lucide-react';
+import { Car, Users, Clock, CheckCircle, Send, ArrowLeft, Fuel, Settings, AlertTriangle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import supabase from '../lib/supabase'; // <--- Tambahkan import supabase client yang benar
 
@@ -14,6 +14,7 @@ interface CarRental {
   image_url: string;
   category: string;
   features: string[];
+  is_available?: boolean;
 }
 
 export default function CarRentalPage() {
@@ -50,7 +51,9 @@ export default function CarRentalPage() {
     return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(price);
   };
 
-  const filteredCars = cars.filter(c => c.type === activeTab);
+  const availableCars = cars.filter(c => c.is_available !== false);
+  const filteredCars = availableCars.filter(c => c.type === activeTab);
+  const unavailableCarsCount = cars.filter(c => c.is_available === false).length;
   const selectedCar = useMemo(() => cars.find(c => c.id === selectedCarId), [cars, selectedCarId]);
 
   // Auto-fill form when car is selected
@@ -68,7 +71,7 @@ export default function CarRentalPage() {
     e.preventDefault();
     
     // Format pesan WhatsApp
-    const message = `*BOOKING SEWA MOBIL - ClickAndGo Journey*%0A%0A` +
+    const message = `*BOOKING SEWA MOBIL - ClickAndGo*%0A%0A` +
       `*Kendaraan:* ${bookingForm.item_name}%0A` +
       `*Durasi Sewa:* ${bookingForm.duration || 'Belum ditentukan'}%0A` +
       `*Harga:* ${bookingForm.total_price}%0A%0A` +
@@ -139,6 +142,19 @@ export default function CarRentalPage() {
             <p className="text-ocean-200 text-lg max-w-2xl">
               Pilihan kendaraan terbaik dari city car hingga bus besar. Tersedia option self drive atau dengan driver profesional yang mengenal Bali dengan baik.
             </p>
+            {/* Availability Summary */}
+            <div className="flex items-center gap-4 mt-6">
+              <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm px-4 py-2 rounded-xl">
+                <CheckCircle className="w-4 h-4 text-emerald-400" />
+                <span className="text-sm text-white font-medium">{availableCars.length} kendaraan tersedia</span>
+              </div>
+              {unavailableCarsCount > 0 && (
+                <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm px-4 py-2 rounded-xl">
+                  <AlertTriangle className="w-4 h-4 text-amber-400" />
+                  <span className="text-sm text-ocean-300">{unavailableCarsCount} sedang tidak tersedia</span>
+                </div>
+              )}
+            </div>
           </motion.div>
         </div>
       </section>
@@ -174,6 +190,21 @@ export default function CarRentalPage() {
       {/* Car Grid */}
       <section className="py-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          {filteredCars.length === 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="text-center py-16"
+            >
+              <div className="w-20 h-20 bg-ocean-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <Car className="w-10 h-10 text-ocean-300" />
+              </div>
+              <h3 className="text-lg font-bold text-ocean-800 mb-2">Belum ada kendaraan tersedia</h3>
+              <p className="text-ocean-500 text-sm max-w-md mx-auto">
+                Saat ini belum ada kendaraan {activeTab === 'self_drive' ? 'self drive' : 'with driver'} yang tersedia. Silakan cek kembali nanti atau hubungi kami.
+              </p>
+            </motion.div>
+          )}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {filteredCars.map((car, i) => (
               <motion.div
@@ -191,6 +222,11 @@ export default function CarRentalPage() {
                   )}
                   <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-sm px-3 py-1 rounded-full text-xs font-semibold text-ocean-800 flex items-center gap-1">
                     <Users className="w-3 h-3" /> {car.seats} Seat
+                  </div>
+                  {/* Availability Badge */}
+                  <div className="absolute top-3 left-3 flex items-center gap-1.5 bg-emerald-500/90 backdrop-blur-sm px-2.5 py-1 rounded-full">
+                    <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                    <span className="text-xs font-semibold text-white">Tersedia</span>
                   </div>
                 </div>
                 <div className="p-5">
@@ -461,7 +497,7 @@ export default function CarRentalPage() {
       {/* Footer */}
       <footer className="bg-ocean-900 text-white py-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <p className="text-ocean-400 text-sm">© 2025 ClickAndGo Journey. All rights reserved.</p>
+          <p className="text-ocean-400 text-sm">© 2026 ClickAndGo. All rights reserved.</p>
         </div>
       </footer>
     </div>

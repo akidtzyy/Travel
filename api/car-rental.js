@@ -8,9 +8,10 @@ export default async function handler(req, res) {
 
   try {
     if (req.method === 'GET') {
-      const { type } = req.query;
+      const { type, is_available } = req.query;
       let query = supabase.from('car_rentals').select('*');
       if (type) query = query.eq('type', type);
+      if (is_available !== undefined) query = query.eq('is_available', is_available === 'true');
       const { data, error } = await query.order('price', { ascending: true });
       if (error) throw error;
       return res.status(200).json(data);
