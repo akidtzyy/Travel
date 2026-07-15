@@ -36,6 +36,28 @@ const translations = {
     loginError: 'Email atau kata sandi salah',
     forgotPassword: 'Lupa kata sandi?',
     backToHome: 'Kembali ke Beranda',
+    notAdminMsg: 'Bukan admin? Masuk sebagai pengguna biasa →',
+
+    // User Auth Page
+    signInToAccount: 'Masuk ke Akun',
+    createNewAccount: 'Buat Akun Baru',
+    userSignInSubtitle: 'Masuk untuk melakukan booking dan melihat riwayat perjalanan Anda',
+    userSignUpSubtitle: 'Daftar untuk mulai memesan paket wisata impian Anda',
+    loginNow: 'Masuk',
+    confirmPassword: 'Konfirmasi Kata Sandi',
+    registerNow: 'Daftar Sekarang',
+    registering: 'Mendaftar...',
+    noAccountYet: 'Belum punya akun?',
+    signUpFree: 'Daftar sekarang',
+    alreadyHaveAccount: 'Sudah punya akun?',
+    passwordMinLength: 'Kata sandi minimal 6 karakter.',
+    passwordMinLengthHint: 'Minimal 6 karakter',
+    confirmPasswordMismatch: 'Konfirmasi kata sandi tidak cocok.',
+    emailAlreadyRegistered: 'Email sudah terdaftar. Silakan login atau gunakan email lain.',
+    signUpSuccess: 'Pendaftaran berhasil! Silakan cek email Anda untuk verifikasi, lalu login.',
+    loginFailed: 'Email atau kata sandi salah. Silakan coba lagi.',
+    genericError: 'Terjadi kesalahan. Silakan coba lagi.',
+    copyrightText: '© 2026 ClickAndGo Journey — Wisata Bali Terpercaya',
 
     // Admin Sidebar
     dashboard: 'Dashboard',
@@ -239,6 +261,28 @@ const translations = {
     loginError: 'Invalid email or password',
     forgotPassword: 'Forgot password?',
     backToHome: 'Back to Home',
+    notAdminMsg: 'Not an admin? Log in as regular user →',
+
+    // User Auth Page
+    signInToAccount: 'Sign In to Account',
+    createNewAccount: 'Create New Account',
+    userSignInSubtitle: 'Sign in to make bookings and view your travel history',
+    userSignUpSubtitle: 'Register to start booking your dream tour packages',
+    loginNow: 'Sign In',
+    confirmPassword: 'Confirm Password',
+    registerNow: 'Register Now',
+    registering: 'Registering...',
+    noAccountYet: 'Don\'t have an account?',
+    signUpFree: 'Register now',
+    alreadyHaveAccount: 'Already have an account?',
+    passwordMinLength: 'Password must be at least 6 characters.',
+    passwordMinLengthHint: 'Minimum 6 characters',
+    confirmPasswordMismatch: 'Confirm password does not match.',
+    emailAlreadyRegistered: 'Email already registered. Please login or use another email.',
+    signUpSuccess: 'Registration successful! Please check your email for verification, then login.',
+    loginFailed: 'Invalid email or password. Please try again.',
+    genericError: 'An error occurred. Please try again.',
+    copyrightText: '© 2026 ClickAndGo Journey — Trusted Bali Travel',
 
     // Admin Sidebar
     dashboard: 'Dashboard',
@@ -545,7 +589,11 @@ const dbTranslations: Record<string, string> = {
   'Pirate / Phinisi Dinner Cruise': 'Pirate / Phinisi Romantic Dinner Cruise',
   'Drop ke hotel, acara bebas': 'Drop-off at hotel, free program',
   'Makan malam seafood Jimbaran (Aroma / New Dewata Cafe / Tepi Pantai)': 'Jimbaran beach seafood dinner (Aroma / New Dewata Cafe / Beachfront)',
+  'Makan malam seafood Jimbaran': 'Jimbaran seafood dinner',
   'Drop ke hotel': 'Drop-off at hotel',
+  'Drop ke airport': 'Airport drop-off',
+  'Drop ke Bandara': 'Airport drop-off',
+  'Drop ke bandara': 'Airport drop-off',
 
   // Destinations
   'Pura Uluwatu': 'Uluwatu Temple',
@@ -595,12 +643,39 @@ const dbTranslations: Record<string, string> = {
   '18 Seat': '18 Seats',
   '35 Seat': '35 Seats',
   '45 Seat': '45 Seats',
-  '15 Seat': '15 Seats'
+  '15 Seat': '15 Seats',
+
+  // Testimonials
+  'Singapura': 'Singapore',
+  'Tokyo, Jepang': 'Tokyo, Japan',
+  'Desember 2024': 'December 2024',
+  'November 2024': 'November 2024',
+  'Oktober 2024': 'October 2024',
+  'Januari 2025': 'January 2025',
+  'Februari 2025': 'February 2025',
+  'Pengalaman luar biasa! Guide sangat ramah dan profesional. Itinerary yang dirancang sangat pas, tidak terlalu terburu-buru. Pasti akan pakai jasa mereka lagi!': 'An amazing experience! The guide was very friendly and professional. The itinerary was perfectly designed, not rushed at all. Will definitely use their services again!',
+  'Sewa mobil di sini paling recommended. Mobil bersih, terawat, dan drivernya sangat tahu jalan-jalan di Bali. Harga juga sangat reasonable.': 'Renting a car here is highly recommended. The car was clean, well-maintained, and the driver knew the roads in Bali very well. The price was also very reasonable.',
+  'Perjalanan Bali yang luar biasa! Tur Nusa Penida sangat menakjubkan. Pemandu kami sangat berpengetahuan luas dan membuat perjalanan sangat menyenangkan. Sangat direkomendasikan!': 'Amazing Bali trip! The Nusa Penida tour was breathtaking. Our guide was very knowledgeable and made the trip so much fun. Highly recommended!',
+  'Paket honeymoon-nya romantis banget! Sunset dinner dan spa couple-nya memorable. Satu-satunya minus cuma cuaca yang kadang hujan.': "The honeymoon package was so romantic! The sunset dinner and couple's spa were memorable. The only downside was the weather, which was occasionally rainy.",
+  'Liburan keluarga paling berkesan! Anak-anak senang banget di Bali Safari dan Waterbom. Driver-nya sabar dan ramah sama anak-anak.': 'The most memorable family holiday! The children loved Bali Safari and Waterbom. The driver was patient and friendly with the kids.',
+  'Agen perjalanan terbaik di Bali! Sangat responsif di WhatsApp, fleksibel dengan perubahan jadwal, dan mobil selalu bersih serta nyaman.': 'Best travel agency in Bali! Very responsive on WhatsApp, flexible with schedule changes, and the car was always clean and comfortable.'
 };
 
+// Generate English-to-Indonesian dictionary automatically from dbTranslations
+const enToIdTranslations: Record<string, string> = {};
+for (const [idText, enText] of Object.entries(dbTranslations)) {
+  if (enText && !(enText in enToIdTranslations)) {
+    enToIdTranslations[enText] = idText;
+  }
+}
+
 export function translateText(text: string): string {
-  if (currentLocale === 'en' && text && text in dbTranslations) {
+  if (!text) return text;
+  if (currentLocale === 'en' && text in dbTranslations) {
     return dbTranslations[text];
+  }
+  if (currentLocale === 'id' && text in enToIdTranslations) {
+    return enToIdTranslations[text];
   }
   return text;
 }
