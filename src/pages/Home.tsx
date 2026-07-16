@@ -126,10 +126,10 @@ export default function Home() {
       try {
         setLoading(true);
 
-        const { data: pkgs, error: pkgErr } = await supabase.from('tour_packages').select('*');
+        const { data: pkgs, error: pkgErr } = await supabase.from('tour_packages').select('*').eq('is_available', true);
         console.log("Data paket dari Supabase:", pkgs);
         const { data: dests, error: destErr } = await supabase.from('destinations').select('*');
-        const { data: cars } = await supabase.from('car_rentals').select('*');
+        const { data: cars } = await supabase.from('car_rentals').select('*').eq('is_available', true);
         const { data: tests } = await supabase.from('testimonials').select('*');
         const { data: faqData } = await supabase.from('faqs').select('*');
 
