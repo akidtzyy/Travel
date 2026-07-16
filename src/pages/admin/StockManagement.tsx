@@ -39,10 +39,24 @@ interface PackageItem {
   };
 }
 
+const paxLabels: Record<string, string> = {
+  '2pax': '2 Pax',
+  '4pax': '4 Pax',
+  '6pax': '6 Pax',
+  '8pax': '8 Pax',
+  '10pax': '10 Pax',
+  '12pax': '12 Pax',
+  '14pax': '14 Pax',
+  '15+1foc': '15+1 FOC',
+  '20+1foc': '20+1 FOC',
+  '25+1foc': '25+1 FOC',
+  '30+1foc': '30+1 FOC',
+};
+
 type Tab = 'cars' | 'packages';
 
 export default function StockManagement() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { session } = useAuth();
   const [activeTab, setActiveTab] = useState<Tab>('cars');
   const [cars, setCars] = useState<CarItem[]>([]);
@@ -61,6 +75,7 @@ export default function StockManagement() {
 
   // Package form
   const [showPkgModal, setShowPkgModal] = useState(false);
+  const [modalTab, setModalTab] = useState<'info' | 'hotels' | 'itinerary'>('info');
   const [editingPkg, setEditingPkg] = useState<PackageItem | null>(null);
   const [pkgForm, setPkgForm] = useState<{
     name: string;
@@ -91,6 +106,10 @@ export default function StockManagement() {
       itinerary: [],
     }
   });
+
+  const [newPriceKeys, setNewPriceKeys] = useState<Record<number, string>>({});
+  const [newPriceValues, setNewPriceValues] = useState<Record<number, string>>({});
+  const [customKeys, setCustomKeys] = useState<Record<number, string>>({});
 
   // Pagination
   const [carPage, setCarPage] = useState(1);
@@ -202,6 +221,11 @@ export default function StockManagement() {
 
   // Package CRUD
   const openPkgModal = (pkg?: PackageItem) => {
+    setModalTab('info');
+    setNewPriceKeys({});
+    setNewPriceValues({});
+    setCustomKeys({});
+
     if (pkg) {
       setEditingPkg(pkg);
       setPkgForm({
@@ -237,6 +261,123 @@ export default function StockManagement() {
       });
     }
     setShowPkgModal(true);
+  };
+
+  // Hotels pricing helpers
+  const updateHotelName = (hotelIndex: number, newName: string) => {
+    setPkgForm(prev => {
+      const hotels = [...(prev.included.hotels || [])];
+      hotels[hotelIndex] = { ...hotels[hotelIndex], hotel: newName };
+      return {
+        ...prev,
+        included: { ...prev.included, hotels }
+      };
+    });
+  };
+
+  const removeHotel = (hotelIndex: number) => {
+    setPkgForm(prev => {
+      const hotels = (prev.included.hotels || []).filter((_, idx) => idx !== hotelIndex);
+      return {
+        ...prev,
+        included: { ...prev.included, hotels }
+      };
+    });
+  };
+
+  const addHotel = () => {
+    setPkgForm(prev => {
+      const hotels = [...(prev.included.hotels || []), { hotel: '', prices: {} }];
+      return {
+        ...prev,
+        included: { ...prev.included, hotels }
+      };
+    });
+  };
+
+  const removeHotelPrice = (hotelIndex: number, priceKey: string) => {
+    setPkgForm(prev => {
+      const hotels = [...(prev.included.hotels || [])];
+      const hotel = { ...hotels[hotelIndex] };
+      const prices = { ...hotel.prices };
+      delete prices[priceKey];
+      hotel.prices = prices;
+      hotels[hotelIndex] = hotel;
+      return {
+        ...prev,
+        included: { ...prev.included, hotels }
+      };
+    });
+  };
+
+  const handleAddPrice = (hotelIndex: number) => {
+    const key = newPriceKeys[hotelIndex] || '2pax';
+    const isCustom = key === 'custom';
+    const actualKey = isCustom ? (customKeys[hotelIndex] || '').trim().toLowerCase() : key;
+    const valStr = newPriceValues[hotelIndex] || '';
+    const val = parseInt(valStr) || 0;
+
+    if (!actualKey) return;
+
+    setPkgForm(prev => {
+      const hotels = [...(prev.included.hotels || [])];
+      const hotel = { ...hotels[hotelIndex] };
+      hotel.prices = { ...hotel.prices, [actualKey]: val };
+      hotels[hotelIndex] = hotel;
+      return {
+        ...prev,
+        included: { ...prev.included, hotels }
+      };
+    });
+
+    // Clear local inputs
+    setNewPriceValues(prev => ({ ...prev, [hotelIndex]: '' }));
+    if (isCustom) {
+      setCustomKeys(prev => ({ ...prev, [hotelIndex]: '' }));
+    }
+  };
+
+  // Itinerary helpers
+  const updateItineraryDay = (dayIndex: number, fields: { title?: string; activitiesText?: string }) => {
+    setPkgForm(prev => {
+      const itinerary = [...(prev.included.itinerary || [])];
+      const dayItem = { ...itinerary[dayIndex] };
+      if (fields.title !== undefined) {
+        dayItem.title = fields.title;
+      }
+      if (fields.activitiesText !== undefined) {
+        dayItem.activities = fields.activitiesText.split('\n').map(a => a.trim()).filter(Boolean);
+      }
+      itinerary[dayIndex] = dayItem;
+      return {
+        ...prev,
+        included: { ...prev.included, itinerary }
+      };
+    });
+  };
+
+  const removeItineraryDay = (dayIndex: number) => {
+    setPkgForm(prev => {
+      const itinerary = (prev.included.itinerary || [])
+        .filter((_, idx) => idx !== dayIndex)
+        .map((item, idx) => ({ ...item, day: idx + 1 })); // Re-number days
+      return {
+        ...prev,
+        included: { ...prev.included, itinerary }
+      };
+    });
+  };
+
+  const addItineraryDay = () => {
+    setPkgForm(prev => {
+      const itinerary = [...(prev.included.itinerary || [])];
+      const nextDay = itinerary.length + 1;
+      itinerary.push({ day: nextDay, title: `Hari ${nextDay}`, activities: [] });
+      return {
+        ...prev,
+        included: { ...prev.included, itinerary }
+      };
+    });
   };
 
   const savePkg = async () => {
@@ -729,7 +870,7 @@ export default function StockManagement() {
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
-              className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl"
+              className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl"
             >
               <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white rounded-t-2xl z-10">
                 <h2 className="text-lg font-bold text-slate-900 font-[family-name:var(--font-display)]">
@@ -739,57 +880,342 @@ export default function StockManagement() {
                   <X className="w-5 h-5 text-slate-500" />
                 </button>
               </div>
-              <div className="p-6 space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('packageName')} *</label>
-                  <input type="text" required value={pkgForm.name} onChange={e => setPkgForm(p => ({ ...p, name: e.target.value }))}
-                    className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-toska-500/30 focus:border-toska-400 outline-none" placeholder="Paket Bali 3D2N" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('description')}</label>
-                  <textarea rows={3} value={pkgForm.description} onChange={e => setPkgForm(p => ({ ...p, description: e.target.value }))}
-                    className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-toska-500/30 focus:border-toska-400 outline-none resize-none" placeholder="Deskripsi paket wisata..." />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('duration')}</label>
-                    <input type="text" value={pkgForm.duration} onChange={e => setPkgForm(p => ({ ...p, duration: e.target.value }))}
-                      className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-toska-500/30 focus:border-toska-400 outline-none" placeholder="3D2N" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('price')} *</label>
-                    <input type="number" min={0} value={pkgForm.price} onChange={e => setPkgForm(p => ({ ...p, price: parseInt(e.target.value) || 0 }))}
-                      className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-toska-500/30 focus:border-toska-400 outline-none" />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('category')}</label>
-                  <input type="text" value={pkgForm.category} onChange={e => setPkgForm(p => ({ ...p, category: e.target.value }))}
-                    className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-toska-500/30 focus:border-toska-400 outline-none" placeholder="3D2N / Honeymoon" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('highlights')}</label>
-                  <input type="text" value={pkgForm.highlights} onChange={e => setPkgForm(p => ({ ...p, highlights: e.target.value }))}
-                    className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-toska-500/30 focus:border-toska-400 outline-none" placeholder="Tanah Lot, Ubud, Kintamani" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('imageUrl')}</label>
-                  <input type="url" value={pkgForm.image_url} onChange={e => setPkgForm(p => ({ ...p, image_url: e.target.value }))}
-                    className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-toska-500/30 focus:border-toska-400 outline-none" placeholder="https://..." />
-                </div>
-                <div className="flex items-center gap-3">
-                  <label className="text-sm font-medium text-slate-700">{t('availability')}:</label>
-                  <button
-                    type="button"
-                    onClick={() => setPkgForm(p => ({ ...p, is_available: !p.is_available }))}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${pkgForm.is_available ? 'bg-emerald-500' : 'bg-slate-300'}`}
-                  >
-                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${pkgForm.is_available ? 'translate-x-6' : 'translate-x-1'}`} />
-                  </button>
-                  <span className="text-sm text-slate-600">{pkgForm.is_available ? t('available') : t('unavailable')}</span>
-                </div>
+
+              {/* Tabs Bar */}
+              <div className="flex border-b border-slate-100 bg-slate-50/50 p-1 gap-1 sticky top-[73px] bg-white z-10">
+                <button
+                  type="button"
+                  onClick={() => setModalTab('info')}
+                  className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${
+                    modalTab === 'info'
+                      ? 'bg-white text-slate-900 shadow-sm border border-slate-200/50'
+                      : 'text-slate-500 hover:text-slate-900 hover:bg-white/50'
+                  }`}
+                >
+                  {locale === 'id' ? 'Informasi Dasar' : 'Basic Info'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setModalTab('hotels')}
+                  className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${
+                    modalTab === 'hotels'
+                      ? 'bg-white text-slate-900 shadow-sm border border-slate-200/50'
+                      : 'text-slate-500 hover:text-slate-900 hover:bg-white/50'
+                  }`}
+                >
+                  {locale === 'id' ? 'Opsi Hotel & Harga' : 'Hotel Options & Pricing'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setModalTab('itinerary')}
+                  className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${
+                    modalTab === 'itinerary'
+                      ? 'bg-white text-slate-900 shadow-sm border border-slate-200/50'
+                      : 'text-slate-500 hover:text-slate-900 hover:bg-white/50'
+                  }`}
+                >
+                  {locale === 'id' ? 'Rencana Perjalanan' : 'Itinerary'}
+                </button>
               </div>
-              <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-3 sticky bottom-0 bg-white rounded-b-2xl">
+
+              <div className="p-6 space-y-4">
+                {modalTab === 'info' && (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('packageName')} *</label>
+                      <input type="text" required value={pkgForm.name} onChange={e => setPkgForm(p => ({ ...p, name: e.target.value }))}
+                        className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-toska-500/30 focus:border-toska-400 outline-none" placeholder="Paket Bali 3D2N" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('description')}</label>
+                      <textarea rows={3} value={pkgForm.description} onChange={e => setPkgForm(p => ({ ...p, description: e.target.value }))}
+                        className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-toska-500/30 focus:border-toska-400 outline-none resize-none" placeholder="Deskripsi paket wisata..." />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('duration')}</label>
+                        <input type="text" value={pkgForm.duration} onChange={e => setPkgForm(p => ({ ...p, duration: e.target.value }))}
+                          className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-toska-500/30 focus:border-toska-400 outline-none" placeholder="3D2N" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('price')} *</label>
+                        <input type="number" min={0} value={pkgForm.price} onChange={e => setPkgForm(p => ({ ...p, price: parseInt(e.target.value) || 0 }))}
+                          className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-toska-500/30 focus:border-toska-400 outline-none" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('category')}</label>
+                      <input type="text" value={pkgForm.category} onChange={e => setPkgForm(p => ({ ...p, category: e.target.value }))}
+                        className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-toska-500/30 focus:border-toska-400 outline-none" placeholder="3D2N / Honeymoon" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('highlights')}</label>
+                      <input type="text" value={pkgForm.highlights} onChange={e => setPkgForm(p => ({ ...p, highlights: e.target.value }))}
+                        className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-toska-500/30 focus:border-toska-400 outline-none" placeholder="Tanah Lot, Ubud, Kintamani" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('imageUrl')}</label>
+                      <input type="url" value={pkgForm.image_url} onChange={e => setPkgForm(p => ({ ...p, image_url: e.target.value }))}
+                        className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-toska-500/30 focus:border-toska-400 outline-none" placeholder="https://..." />
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <label className="text-sm font-medium text-slate-700">{t('availability')}:</label>
+                      <button
+                        type="button"
+                        onClick={() => setPkgForm(p => ({ ...p, is_available: !p.is_available }))}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${pkgForm.is_available ? 'bg-emerald-500' : 'bg-slate-300'}`}
+                      >
+                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${pkgForm.is_available ? 'translate-x-6' : 'translate-x-1'}`} />
+                      </button>
+                      <span className="text-sm text-slate-600">{pkgForm.is_available ? t('available') : t('unavailable')}</span>
+                    </div>
+                  </div>
+                )}
+
+                {modalTab === 'hotels' && (
+                  <div className="space-y-6">
+                    <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                      <div>
+                        <h3 className="text-sm font-bold text-slate-900">
+                          {locale === 'id' ? 'Opsi Hotel & Harga Pax' : 'Hotel Options & Pax Pricing'}
+                        </h3>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          {locale === 'id' 
+                            ? 'Atur harga paket per hotel berdasarkan kapasitas pax.' 
+                            : 'Configure package pricing per hotel based on pax capacity.'}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={addHotel}
+                        className="flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white px-3.5 py-2 rounded-xl text-xs font-semibold transition-all shrink-0"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        {locale === 'id' ? 'Tambah Hotel' : 'Add Hotel'}
+                      </button>
+                    </div>
+
+                    <div className="space-y-4">
+                      {(!pkgForm.included.hotels || pkgForm.included.hotels.length === 0) ? (
+                        <div className="text-center py-10 border border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
+                          <Tag className="w-8 h-8 text-slate-300 mx-auto mb-2.5" />
+                          <p className="text-xs text-slate-500 font-medium">
+                            {locale === 'id' ? 'Belum ada opsi hotel ditambahkan.' : 'No hotel options added yet.'}
+                          </p>
+                        </div>
+                      ) : (
+                        pkgForm.included.hotels.map((hotelOpt, hotelIdx) => (
+                          <div 
+                            key={hotelIdx} 
+                            className="border border-slate-200/80 rounded-2xl bg-white p-4 shadow-sm hover:shadow-md transition-all space-y-4 relative"
+                          >
+                            <button
+                              type="button"
+                              onClick={() => removeHotel(hotelIdx)}
+                              className="absolute top-4 right-4 p-1.5 hover:bg-red-50 text-red-500 rounded-lg transition-all"
+                              title={locale === 'id' ? 'Hapus Hotel' : 'Delete Hotel'}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+
+                            <div className="max-w-[85%]">
+                              <label className="block text-xs font-bold text-slate-700 mb-1">
+                                {locale === 'id' ? `Hotel #${hotelIdx + 1}` : `Hotel #${hotelIdx + 1}`}
+                              </label>
+                              <input
+                                type="text"
+                                required
+                                value={hotelOpt.hotel}
+                                onChange={(e) => updateHotelName(hotelIdx, e.target.value)}
+                                placeholder={locale === 'id' ? 'Contoh: Hotel Bintang 3 / Amaris Kuta' : 'e.g. 3-Star Hotel / Amaris Kuta'}
+                                className="w-full px-3.5 py-2.5 bg-slate-50/50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-toska-500/20 focus:border-toska-400 outline-none transition-all font-medium text-slate-800"
+                              />
+                            </div>
+
+                            <div className="space-y-3 pt-2 border-t border-slate-100">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold text-slate-700">
+                                  {locale === 'id' ? 'Harga berdasarkan Jumlah Pax' : 'Pricing by Pax Count'}
+                                </span>
+                              </div>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                {Object.entries(hotelOpt.prices || {}).map(([paxKey, priceVal]) => (
+                                  <div 
+                                    key={paxKey} 
+                                    className="flex items-center justify-between gap-2 bg-slate-50 border border-slate-200/60 rounded-xl p-2 pl-3"
+                                  >
+                                    <div className="flex items-center gap-1.5 min-w-0">
+                                      <Users className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                      <span className="text-xs font-semibold text-slate-700 truncate">
+                                        {paxLabels[paxKey] || paxKey}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                      <span className="text-xs text-slate-400 font-medium">Rp</span>
+                                      <input
+                                        type="number"
+                                        min={0}
+                                        value={priceVal}
+                                        onChange={(e) => {
+                                          const val = parseInt(e.target.value) || 0;
+                                          setPkgForm(prev => {
+                                            const hotels = [...(prev.included.hotels || [])];
+                                            hotels[hotelIdx] = {
+                                              ...hotels[hotelIdx],
+                                              prices: { ...hotels[hotelIdx].prices, [paxKey]: val }
+                                            };
+                                            return { ...prev, included: { ...prev.included, hotels } };
+                                          });
+                                        }}
+                                        className="w-24 px-2 py-1 text-right font-semibold text-xs border border-slate-200 rounded-lg outline-none focus:border-toska-400 focus:ring-2 focus:ring-toska-500/10"
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={() => removeHotelPrice(hotelIdx, paxKey)}
+                                        className="p-1 hover:bg-red-50 text-red-500 rounded-md transition-colors"
+                                      >
+                                        <X className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+
+                              <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-dashed border-slate-100">
+                                <select
+                                  value={newPriceKeys[hotelIdx] || '2pax'}
+                                  onChange={(e) => {
+                                    const k = e.target.value;
+                                    setNewPriceKeys(p => ({ ...p, [hotelIdx]: k }));
+                                  }}
+                                  className="px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-toska-400"
+                                >
+                                  {Object.entries(paxLabels).map(([key, val]) => (
+                                    <option key={key} value={key}>{val}</option>
+                                  ))}
+                                  <option value="custom">{locale === 'id' ? 'Custom...' : 'Custom...'}</option>
+                                </select>
+
+                                {newPriceKeys[hotelIdx] === 'custom' && (
+                                  <input
+                                    type="text"
+                                    placeholder="e.g. 3pax, 5pax"
+                                    value={customKeys[hotelIdx] || ''}
+                                    onChange={(e) => setCustomKeys(p => ({ ...p, [hotelIdx]: e.target.value }))}
+                                    className="w-24 px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg outline-none focus:border-toska-400"
+                                  />
+                                )}
+
+                                <div className="flex items-center gap-1.5 flex-1 min-w-[120px]">
+                                  <span className="text-xs text-slate-400 font-medium">Rp</span>
+                                  <input
+                                    type="number"
+                                    placeholder="Harga"
+                                    value={newPriceValues[hotelIdx] || ''}
+                                    onChange={(e) => setNewPriceValues(p => ({ ...p, [hotelIdx]: e.target.value }))}
+                                    className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg outline-none focus:border-toska-400"
+                                  />
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleAddPrice(hotelIdx)}
+                                  className="bg-slate-900 hover:bg-slate-800 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 shrink-0"
+                                >
+                                  <Plus className="w-3.5 h-3.5" />
+                                  {locale === 'id' ? 'Tambah' : 'Add'}
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {modalTab === 'itinerary' && (
+                  <div className="space-y-6">
+                    <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                      <div>
+                        <h3 className="text-sm font-bold text-slate-900">
+                          {locale === 'id' ? 'Rencana Perjalanan (Itinerary)' : 'Itinerary Planning'}
+                        </h3>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          {locale === 'id' 
+                            ? 'Atur jadwal kegiatan harian untuk paket wisata.' 
+                            : 'Configure the daily schedule and activities for this tour package.'}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={addItineraryDay}
+                        className="flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white px-3.5 py-2 rounded-xl text-xs font-semibold transition-all shrink-0"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        {locale === 'id' ? 'Tambah Hari' : 'Add Day'}
+                      </button>
+                    </div>
+
+                    <div className="space-y-4">
+                      {(!pkgForm.included.itinerary || pkgForm.included.itinerary.length === 0) ? (
+                        <div className="text-center py-10 border border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
+                          <Clock className="w-8 h-8 text-slate-300 mx-auto mb-2.5" />
+                          <p className="text-xs text-slate-500 font-medium">
+                            {locale === 'id' ? 'Belum ada hari itinerary ditambahkan.' : 'No itinerary days added yet.'}
+                          </p>
+                        </div>
+                      ) : (
+                        pkgForm.included.itinerary.map((dayItem, dayIdx) => (
+                          <div 
+                            key={dayIdx} 
+                            className="border border-slate-200/80 rounded-2xl bg-white p-4 shadow-sm hover:shadow-md transition-all space-y-3 relative"
+                          >
+                            <button
+                              type="button"
+                              onClick={() => removeItineraryDay(dayIdx)}
+                              className="absolute top-4 right-4 p-1.5 hover:bg-red-50 text-red-500 rounded-lg transition-all"
+                              title={locale === 'id' ? 'Hapus Hari' : 'Delete Day'}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+
+                            <div className="flex items-center gap-2 max-w-[85%]">
+                              <span className="inline-flex items-center justify-center bg-violet-50 text-violet-700 w-8 h-8 rounded-lg font-bold text-xs shrink-0">
+                                {dayItem.day}
+                              </span>
+                              <input
+                                type="text"
+                                required
+                                value={dayItem.title}
+                                onChange={(e) => updateItineraryDay(dayIdx, { title: e.target.value })}
+                                placeholder={locale === 'id' ? 'Judul Hari (contoh: Penjemputan di Bandara & Bali Selatan)' : 'Day Title (e.g. Airport Pick-up & South Bali)'}
+                                className="w-full px-3.5 py-2 bg-slate-50/50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-toska-500/20 focus:border-toska-400 outline-none transition-all font-semibold text-slate-800"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                                {locale === 'id' ? 'Aktivitas Harian (Satu per baris)' : 'Daily Activities (One per line)'}
+                              </label>
+                              <textarea
+                                rows={3}
+                                value={dayItem.activities?.join('\n') || ''}
+                                onChange={(e) => updateItineraryDay(dayIdx, { activitiesText: e.target.value })}
+                                placeholder={locale === 'id' ? 'Penjemputan di bandara\nKalungan bunga selamat datang\nMakan malam seafood Jimbaran' : 'Airport pick-up\nWelcome flower garland\nJimbaran seafood dinner'}
+                                className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-toska-500/20 focus:border-toska-400 outline-none resize-none"
+                              />
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-3 sticky bottom-0 bg-white rounded-b-2xl z-10">
                 <button onClick={() => setShowPkgModal(false)} className="px-5 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition-colors">
                   {t('cancelAction')}
                 </button>
