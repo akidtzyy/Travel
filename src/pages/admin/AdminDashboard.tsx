@@ -34,23 +34,32 @@ export default function AdminDashboard() {
 
   const loadDashboardData = async () => {
     try {
-      const [pkgRes, carRes, custRes] = await Promise.all([
+      const [pkgRes, carRes, custRes, bookRes] = await Promise.all([
         supabase.from('tour_packages').select('id', { count: 'exact' }),
         supabase.from('car_rentals').select('id', { count: 'exact' }),
-        supabase.from('customers').select('*').order('created_at', { ascending: false }).limit(5),
+        supabase.from('customers').select('id', { count: 'exact' }),
+        supabase.from('bookings').select('*').order('created_at', { ascending: false }).limit(5),
       ]);
 
-      const totalCustomersRes = await supabase.from('customers').select('id', { count: 'exact' });
-      const bookedRes = await supabase.from('customers').select('id', { count: 'exact' }).in('booking_status', ['booked', 'completed']);
+      const totalBookingsRes = await supabase.from('bookings').select('id', { count: 'exact' });
 
       setStats({
         totalPackages: pkgRes.count || 0,
         totalCars: carRes.count || 0,
-        totalCustomers: totalCustomersRes.count || 0,
-        totalBookings: bookedRes.count || 0,
+        totalCustomers: custRes.count || 0,
+        totalBookings: totalBookingsRes.count || 0,
       });
 
-      if (custRes.data) setRecentCustomers(custRes.data);
+      if (bookRes.data) {
+        setRecentCustomers(bookRes.data.map((b: any) => ({
+          id: b.id,
+          full_name: b.name,
+          email: b.email,
+          phone: b.phone,
+          booking_status: b.status,
+          created_at: b.created_at
+        })));
+      }
     } catch (err) {
       console.error('Dashboard error:', err);
     } finally {
@@ -69,6 +78,9 @@ export default function AdminDashboard() {
     const badges: Record<string, string> = {
       interested: 'bg-blue-50 text-blue-600 border-blue-200',
       booked: 'bg-amber-50 text-amber-600 border-amber-200',
+      pending: 'bg-amber-50 text-amber-600 border-amber-200',
+      confirmed: 'bg-blue-50 text-blue-600 border-blue-200',
+      paid: 'bg-emerald-50 text-emerald-600 border-emerald-200',
       completed: 'bg-emerald-50 text-emerald-600 border-emerald-200',
       cancelled: 'bg-red-50 text-red-600 border-red-200',
     };
@@ -79,6 +91,9 @@ export default function AdminDashboard() {
     const labels: Record<string, string> = {
       interested: t('interested'),
       booked: t('booked'),
+      pending: t('pending'),
+      confirmed: t('confirmed'),
+      paid: t('paid'),
       completed: t('completed'),
       cancelled: t('cancelled'),
     };
