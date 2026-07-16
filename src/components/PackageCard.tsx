@@ -23,9 +23,9 @@ interface PackageData {
   highlights: string[];
   image_url: string;
   category: string;
-  included: {
-    itinerary: ItineraryDay[];
-    hotels: HotelOption[];
+  included?: {
+    itinerary?: ItineraryDay[];
+    hotels?: HotelOption[];
     includes_list?: string[];
     excludes_list?: string[];
   };
@@ -72,7 +72,7 @@ export default function PackageCard({ pkg, index, onSelect }: PackageCardProps) 
   
   const isHoneymoon = pkg.category === 'Honeymoon';
   // Jika bukan honeymoon, kita asumsikan ini paket reguler yang menggunakan sistem pilihan hotel & harga per pax
-  const usePaxPricing = !isHoneymoon && pkg.included?.hotels?.length > 0;
+  const usePaxPricing = !isHoneymoon && (pkg.included?.hotels?.length ?? 0) > 0;
 
   return (
     <motion.div
@@ -119,7 +119,7 @@ export default function PackageCard({ pkg, index, onSelect }: PackageCardProps) 
                 isHoneymoon ? 'bg-pink-50 text-pink-700' : 'bg-ocean-50 text-ocean-700'
               }`}>{translateText(h)}</span>
             ))}
-            {pkg.highlights?.length > 6 && (
+            {(pkg.highlights?.length ?? 0) > 6 && (
               <span className="bg-toska-50 text-toska-700 text-xs px-3 py-1 rounded-full font-medium">
                 +{pkg.highlights.length - 6} {locale === 'id' ? 'lainnya' : 'others'}
               </span>
@@ -196,13 +196,13 @@ export default function PackageCard({ pkg, index, onSelect }: PackageCardProps) 
                   exit={{ opacity: 0, height: 0 }}
                   className="overflow-hidden mb-4"
                 >
-                  {pkg.included.includes_list && (
+                  {pkg.included?.includes_list && (
                     <div className="mb-4">
                       <p className="text-xs font-bold text-green-700 uppercase tracking-wider mb-2 flex items-center gap-1">
                         <Check className="w-3.5 h-3.5" /> {t('includedInPackage')}
                       </p>
                       <ul className="space-y-1">
-                        {pkg.included.includes_list.map((item, i) => (
+                        {pkg.included?.includes_list?.map((item, i) => (
                           <li key={i} className="flex items-start gap-2 text-sm text-ocean-600">
                             <Check className="w-3.5 h-3.5 text-green-500 shrink-0 mt-0.5" />
                             <span>{translateText(item)}</span>
@@ -211,13 +211,13 @@ export default function PackageCard({ pkg, index, onSelect }: PackageCardProps) 
                       </ul>
                     </div>
                   )}
-                  {pkg.included.excludes_list && (
+                  {pkg.included?.excludes_list && (
                     <div>
                       <p className="text-xs font-bold text-red-700 uppercase tracking-wider mb-2 flex items-center gap-1">
                         <X className="w-3.5 h-3.5" /> {t('notIncluded')}
                       </p>
                       <ul className="space-y-1">
-                        {pkg.included.excludes_list.map((item, i) => (
+                        {pkg.included?.excludes_list?.map((item, i) => (
                           <li key={i} className="flex items-start gap-2 text-sm text-ocean-600">
                             <X className="w-3.5 h-3.5 text-red-400 shrink-0 mt-0.5" />
                             <span>{translateText(item)}</span>
@@ -261,8 +261,16 @@ export default function PackageCard({ pkg, index, onSelect }: PackageCardProps) 
 
               <div className="bg-sand-50 rounded-xl border border-sand-200 overflow-hidden">
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-px bg-sand-200">
-                  {pkg.included?.hotels?.[activeHotel]?.prices ? (
-                    Object.entries(pkg.included.hotels[activeHotel].prices).map(([pax, price]) => (
+                  {(() => {
+                    const activeHotelObj = pkg.included?.hotels?.[activeHotel];
+                    if (!activeHotelObj?.prices) {
+                      return (
+                        <div className="bg-white p-4 col-span-2 sm:col-span-3 text-center text-xs text-ocean-500">
+                          {locale === 'id' ? 'Harga tidak tersedia untuk hotel ini.' : 'Price not available for this hotel.'}
+                        </div>
+                      );
+                    }
+                    return Object.entries(activeHotelObj.prices).map(([pax, price]) => (
                       <div key={pax} className="bg-white p-3 text-center hover:bg-toska-50 transition-colors">
                         <div className="flex items-center justify-center gap-1 mb-1">
                           <Users className="w-3 h-3 text-ocean-400" />
@@ -271,12 +279,8 @@ export default function PackageCard({ pkg, index, onSelect }: PackageCardProps) 
                         <span className="text-sm font-bold text-toska-600">{formatPrice(price)}</span>
                         <span className="text-xs text-ocean-500 block">/{t('pax')}</span>
                       </div>
-                    ))
-                  ) : (
-                    <div className="bg-white p-4 text-center text-xs text-ocean-500">
-                      {locale === 'id' ? 'Harga tidak tersedia untuk hotel ini.' : 'Price not available for this hotel.'}
-                    </div>
-                  )}
+                    ));
+                  })()}
                 </div>
               </div>
             </>
@@ -326,10 +330,10 @@ export default function PackageCard({ pkg, index, onSelect }: PackageCardProps) 
           
           <button
             onClick={() => {
-              if (usePaxPricing && pkg.included?.hotels?.[activeHotel]) {
-                const hotel = pkg.included.hotels[activeHotel];
-                const firstPax = Object.keys(hotel.prices)[0] || '2pax';
-                onSelect(pkg, hotel.hotel, firstPax, hotel.prices[firstPax] || lowestPrice);
+              const activeHotelObj = pkg.included?.hotels?.[activeHotel];
+              if (usePaxPricing && activeHotelObj) {
+                const firstPax = Object.keys(activeHotelObj.prices)[0] || '2pax';
+                onSelect(pkg, activeHotelObj.hotel, firstPax, activeHotelObj.prices[firstPax] || lowestPrice);
               } else {
                 onSelect(pkg, firstHotel?.hotel || 'Standard Hotel', '1 Couple', lowestPrice);
               }

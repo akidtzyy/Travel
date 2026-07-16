@@ -17,9 +17,9 @@ interface TourPackage {
   highlights: string[];
   image_url: string;
   category: string;
-  included: {
-    itinerary: Array<{day: number; title: string; activities: string[]}>;
-    hotels: Array<{hotel: string; prices: Record<string, number>}>;
+  included?: {
+    itinerary?: Array<{day: number; title: string; activities: string[]}>;
+    hotels?: Array<{hotel: string; prices: Record<string, number>}>;
     includes_list?: string[];
     excludes_list?: string[];
   };
@@ -164,15 +164,15 @@ export default function Home() {
 
   // Computed: selected package
   const selectedPkg = useMemo(() => packages.find(p => p.id === selectedPkgId), [packages, selectedPkgId]);
-  const selectedHotel = selectedPkg?.included.hotels[selectedHotelIdx];
+  const selectedHotel = selectedPkg?.included?.hotels?.[selectedHotelIdx];
   const isPaxPricing = useMemo(() => {
-    if (!selectedHotel) return true;
+    if (!selectedHotel?.prices) return true;
     return Object.keys(selectedHotel.prices).every(k => k in paxLabels);
   }, [selectedHotel]);
 
   // Computed: pax options for selected hotel
   const paxOptions = useMemo(() => {
-    if (!selectedHotel) return [];
+    if (!selectedHotel?.prices) return [];
     return Object.keys(selectedHotel.prices).map(key => ({
       key,
       label: paxLabels[key] || key,
@@ -287,7 +287,7 @@ export default function Home() {
 
   const selectPackage = (pkg: TourPackage, hotel: string, pax: string, price: number) => {
     setSelectedPkgId(pkg.id);
-    const hotelIdx = pkg.included.hotels.findIndex(h => h.hotel === hotel);
+    const hotelIdx = pkg.included?.hotels?.findIndex(h => h.hotel === hotel) ?? -1;
     setSelectedHotelIdx(hotelIdx >= 0 ? hotelIdx : 0);
     setSelectedPaxKey(pax);
     setBookingForm(prev => ({ ...prev, booking_type: 'package' }));
@@ -388,7 +388,7 @@ export default function Home() {
                 index={index}
                 onSelect={(selectedPkg, hotel, pax, price) => {
                   setSelectedPkgId(selectedPkg.id); 
-                  const hotelIdx = selectedPkg.included.hotels.findIndex(h => h.hotel === hotel);
+                  const hotelIdx = selectedPkg.included?.hotels?.findIndex(h => h.hotel === hotel) ?? -1;
                   setSelectedHotelIdx(hotelIdx >= 0 ? hotelIdx : 0);
                   setSelectedPaxKey(pax);
                   setBookingForm(p => ({
@@ -800,11 +800,11 @@ export default function Home() {
                   </div>
 
                   {/* Pilih Hotel */}
-                  {selectedPkg && (
+                  {selectedPkg?.included?.hotels && (
                     <div className="sm:col-span-2">
                       <label className="block text-sm font-medium text-ocean-800 mb-2.5">{t('selectHotelOption')} *</label>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        {selectedPkg.included.hotels.map((h, i) => (
+                        {selectedPkg.included.hotels?.map((h, i) => (
                           <button
                             key={i}
                             type="button"
