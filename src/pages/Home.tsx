@@ -256,16 +256,35 @@ export default function Home() {
     
     try {
       setBookingLoading(true);
+      const cleanPhone = bookingForm.phone.replace(/\D/g, '');
       const notesWithDetails = `Tipe: ${bookingForm.booking_type === 'package' ? 'Paket Wisata' : 'Sewa Mobil'}\nItem: ${bookingForm.item_name}\nJumlah/Durasi: ${bookingForm.duration}\nTanggal: ${bookingForm.date}\nHarga: ${bookingForm.total_price}\nCatatan: ${bookingForm.notes}`;
       
-      const { error } = await supabase.from('customers').insert({
+      // Original Customer insert
+      const { error: custErr } = await supabase.from('customers').insert({
         full_name: bookingForm.name,
-        phone: bookingForm.phone,
+        phone: cleanPhone,
         email: bookingForm.email,
         booking_status: 'booked',
         notes: notesWithDetails
       });
-      if (error) throw error;
+      if (custErr) throw custErr;
+
+      // NEW Bookings insert
+      const { error: bookingErr } = await supabase.from('bookings').insert({
+        name: bookingForm.name,
+        email: bookingForm.email,
+        phone: cleanPhone,
+        booking_type: bookingForm.booking_type,
+        item_name: bookingForm.item_name,
+        date: bookingForm.date,
+        duration: bookingForm.duration,
+        notes: bookingForm.notes,
+        total_price: bookingForm.total_price,
+        status: 'pending',
+        payment_status: 'unpaid'
+      });
+      if (bookingErr) throw bookingErr;
+
       setBookingSuccess(true);
     } catch (err) {
       console.error("Gagal menyimpan data booking ke database:", err);
