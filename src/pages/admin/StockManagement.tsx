@@ -76,7 +76,7 @@ export default function StockManagement() {
     try {
       const [carsRes, pkgsRes] = await Promise.all([
         supabase.from('car_rentals').select('*').order('id', { ascending: true }),
-        supabase.from('tour_packages').select('id, name, description, duration, price, highlights, image_url, category, is_available').order('id', { ascending: true }),
+        supabase.from('tour_packages').select('*').order('id', { ascending: true }),
       ]);
       if (carsRes.data) setCars(carsRes.data);
       if (pkgsRes.data) setPackages(pkgsRes.data);
