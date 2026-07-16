@@ -9,6 +9,7 @@ import AdminLogin from './pages/admin/AdminLogin';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import StockManagement from './pages/admin/StockManagement';
 import CustomerDatabase from './pages/admin/CustomerDatabase';
+import BookingManagement from './pages/admin/BookingManagement';
 import AdminLayout from './components/admin/AdminLayout';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -89,6 +90,7 @@ export default function App() {
 
             {/* Protected Admin Routes */}
             <Route path="/admin" element={<ProtectedRoute><AdminDashboard /></ProtectedRoute>} />
+            <Route path="/admin/bookings" element={<ProtectedRoute><BookingManagement /></ProtectedRoute>} />
             <Route path="/admin/stock" element={<ProtectedRoute><StockManagement /></ProtectedRoute>} />
             <Route path="/admin/customers" element={<ProtectedRoute><CustomerDatabase /></ProtectedRoute>} />
           </Routes>

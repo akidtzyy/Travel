@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, Package, Users, LogOut, Menu, X,
-  Palmtree, ChevronRight, Globe
+  Palmtree, ChevronRight, Globe, CalendarCheck
 } from 'lucide-react';
 import { useAuth } from '../../lib/AuthContext';
 import { useI18n } from '../../lib/I18nContext';
@@ -27,6 +27,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
   const menuItems = [
     { path: '/admin', icon: LayoutDashboard, label: t('dashboard') },
+    { path: '/admin/bookings', icon: CalendarCheck, label: t('bookingManagement') },
     { path: '/admin/stock', icon: Package, label: t('stockManagement') },
     { path: '/admin/customers', icon: Users, label: t('customerDatabase') },
   ];
