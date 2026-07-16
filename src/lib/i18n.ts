@@ -249,6 +249,26 @@ const translations = {
     denganSupirWithDriver: 'Dengan Supir (With Driver)',
     bbmTermasuk: 'BBM Termasuk',
     pesan: 'Pesan',
+
+    // Booking Management
+    bookingManagement: 'Kelola Booking',
+    bookingId: 'ID Booking',
+    paymentStatus: 'Status Pembayaran',
+    unpaid: 'Belum Lunas',
+    paid: 'Lunas',
+    pending: 'Tertunda',
+    confirmed: 'Dikonfirmasi',
+    completed: 'Selesai',
+    cancelled: 'Dibatalkan',
+    invoice: 'Faktur / Invoice',
+    printInvoice: 'Cetak Invoice',
+    confirmBooking: 'Konfirmasi Booking',
+    cancelBooking: 'Batalkan Booking',
+    bookingDetails: 'Detail Booking',
+    bookingSaved: 'Data booking berhasil diperbarui',
+    bookingDeleted: 'Booking berhasil dihapus',
+    bookingType: 'Tipe Booking',
+    days: 'Hari',
   },
   en: {
     // Admin Login
@@ -474,6 +494,26 @@ const translations = {
     denganSupirWithDriver: 'With Driver',
     bbmTermasuk: 'Fuel Included',
     pesan: 'Book',
+
+    // Booking Management
+    bookingManagement: 'Booking Management',
+    bookingId: 'Booking ID',
+    paymentStatus: 'Payment Status',
+    unpaid: 'Unpaid',
+    paid: 'Paid',
+    pending: 'Pending',
+    confirmed: 'Confirmed',
+    completed: 'Completed',
+    cancelled: 'Cancelled',
+    invoice: 'Invoice',
+    printInvoice: 'Print Invoice',
+    confirmBooking: 'Confirm Booking',
+    cancelBooking: 'Cancel Booking',
+    bookingDetails: 'Booking Details',
+    bookingSaved: 'Booking data successfully updated',
+    bookingDeleted: 'Booking successfully deleted',
+    bookingType: 'Booking Type',
+    days: 'Days',
   },
 } as const;
 
