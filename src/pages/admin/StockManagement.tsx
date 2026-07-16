@@ -31,6 +31,12 @@ interface PackageItem {
   image_url: string;
   category: string;
   is_available?: boolean;
+  included?: {
+    hotels?: Array<{ hotel: string; prices: Record<string, number> }>;
+    itinerary?: Array<{ day: number; title: string; activities: string[] }>;
+    includes_list?: string[];
+    excludes_list?: string[];
+  };
 }
 
 type Tab = 'cars' | 'packages';
@@ -56,9 +62,34 @@ export default function StockManagement() {
   // Package form
   const [showPkgModal, setShowPkgModal] = useState(false);
   const [editingPkg, setEditingPkg] = useState<PackageItem | null>(null);
-  const [pkgForm, setPkgForm] = useState({
-    name: '', description: '', duration: '', price: 0, highlights: '',
-    image_url: '', category: '', is_available: true,
+  const [pkgForm, setPkgForm] = useState<{
+    name: string;
+    description: string;
+    duration: string;
+    price: number;
+    highlights: string;
+    image_url: string;
+    category: string;
+    is_available: boolean;
+    included: {
+      hotels?: Array<{ hotel: string; prices: Record<string, number> }>;
+      itinerary?: Array<{ day: number; title: string; activities: string[] }>;
+      includes_list?: string[];
+      excludes_list?: string[];
+    };
+  }>({
+    name: '',
+    description: '',
+    duration: '',
+    price: 0,
+    highlights: '',
+    image_url: '',
+    category: '',
+    is_available: true,
+    included: {
+      hotels: [],
+      itinerary: [],
+    }
   });
 
   // Pagination
@@ -174,13 +205,36 @@ export default function StockManagement() {
     if (pkg) {
       setEditingPkg(pkg);
       setPkgForm({
-        name: pkg.name, description: pkg.description || '', duration: pkg.duration || '',
-        price: pkg.price, highlights: pkg.highlights?.join(', ') || '', image_url: pkg.image_url || '',
-        category: pkg.category || '', is_available: pkg.is_available !== false,
+        name: pkg.name,
+        description: pkg.description || '',
+        duration: pkg.duration || '',
+        price: pkg.price,
+        highlights: pkg.highlights?.join(', ') || '',
+        image_url: pkg.image_url || '',
+        category: pkg.category || '',
+        is_available: pkg.is_available !== false,
+        included: pkg.included || { hotels: [], itinerary: [] }
       });
     } else {
       setEditingPkg(null);
-      setPkgForm({ name: '', description: '', duration: '', price: 0, highlights: '', image_url: '', category: '', is_available: true });
+      setPkgForm({
+        name: '',
+        description: '',
+        duration: '',
+        price: 0,
+        highlights: '',
+        image_url: '',
+        category: '',
+        is_available: true,
+        included: {
+          hotels: [
+            { hotel: 'Standard Hotel', prices: { '2pax': 1000000 } }
+          ],
+          itinerary: [
+            { day: 1, title: 'Hari 1', activities: ['Penjemputan bandara'] }
+          ]
+        }
+      });
     }
     setShowPkgModal(true);
   };
@@ -200,6 +254,7 @@ export default function StockManagement() {
       image_url: pkgForm.image_url,
       category: pkgForm.category,
       is_available: pkgForm.is_available,
+      included: pkgForm.included,
     };
 
     try {
