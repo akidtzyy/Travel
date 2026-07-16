@@ -24,25 +24,76 @@ const AuthContext = createContext<AuthContextType>({
   isLoggedIn: false,
 });
 
+const fetchUserRole = async (userId: string): Promise<'user' | 'admin'> => {
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', userId)
+      .single();
+    
+    if (error) {
+      console.warn('Could not fetch user role, defaulting to user:', error.message);
+      return 'user';
+    }
+    return (data?.role as 'user' | 'admin') ?? 'user';
+  } catch (err) {
+    console.error('Unexpected error fetching user role:', err);
+    return 'user';
+  }
+};
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
+  const [role, setRole] = useState<'user' | 'admin' | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    let isMounted = true;
+
+    const initAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!isMounted) return;
+      
       setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
+      const currentUser = session?.user ?? null;
+      setUser(currentUser);
+      if (currentUser) {
+        const userRole = await fetchUserRole(currentUser.id);
+        if (isMounted) {
+          setRole(userRole);
+        }
+      } else {
+        if (isMounted) setRole(null);
+      }
+      if (isMounted) setLoading(false);
+    };
+
+    initAuth();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (!isMounted) return;
+
+      setSession(session);
+      const currentUser = session?.user ?? null;
+      setUser(currentUser);
+      
+      if (currentUser) {
+        const userRole = await fetchUserRole(currentUser.id);
+        if (isMounted) {
+          setRole(userRole);
+        }
+      } else {
+        if (isMounted) setRole(null);
+      }
+      if (isMounted) setLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
-
-    return () => subscription.unsubscribe();
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signIn = async (email: string, password: string) => {
@@ -67,14 +118,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut();
   };
 
-  const ADMIN_EMAILS = [
-  "andhika.ramak@gmail.com",
-  ];
-
-  const isAdmin =
-    !!user &&
-    ADMIN_EMAILS.includes(user.email ?? "");
-
+  const isAdmin = role === 'admin';
   const isLoggedIn = !!user;
 
   return (
