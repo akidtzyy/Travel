@@ -280,8 +280,7 @@ export default function Home() {
         duration: bookingForm.duration,
         notes: bookingForm.notes,
         total_price: bookingForm.total_price,
-        status: 'pending',
-        payment_status: 'unpaid'
+        status: 'pending'
       });
       if (bookingErr) throw bookingErr;
 

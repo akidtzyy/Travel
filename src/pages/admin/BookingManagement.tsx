@@ -21,11 +21,9 @@ interface Booking {
   notes: string;
   total_price: string;
   status: 'pending' | 'confirmed' | 'paid' | 'completed' | 'cancelled';
-  payment_status: 'unpaid' | 'paid';
   ktp_url: string | null;
   sim_url: string | null;
   created_at: string;
-  updated_at: string;
 }
 
 interface AddBookingForm {
@@ -39,7 +37,6 @@ interface AddBookingForm {
   notes: string;
   total_price: string;
   status: 'pending' | 'confirmed' | 'paid' | 'completed' | 'cancelled';
-  payment_status: 'unpaid' | 'paid';
 }
 
 export default function BookingManagement() {
@@ -78,7 +75,6 @@ export default function BookingManagement() {
     notes: '',
     total_price: '',
     status: 'pending',
-    payment_status: 'unpaid',
   });
 
   // Pagination
@@ -111,25 +107,15 @@ export default function BookingManagement() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  const updateStatus = async (id: number, field: 'status' | 'payment_status', value: string) => {
+  const updateStatus = async (id: number, value: string) => {
     try {
       // Optimistic UI update
-      setBookings(prev => prev.map(b => b.id === id ? { ...b, [field]: value } : b));
+      setBookings(prev => prev.map(b => b.id === id ? { ...b, status: value as any } : b));
       if (selectedBooking && selectedBooking.id === id) {
-        setSelectedBooking(prev => prev ? { ...prev, [field]: value as any } : null);
+        setSelectedBooking(prev => prev ? { ...prev, status: value as any } : null);
       }
 
-      const updates: any = { [field]: value };
-      // If booking status is updated to Paid, auto update payment_status to Paid
-      if (field === 'status' && value === 'paid') {
-        updates.payment_status = 'paid';
-        setBookings(prev => prev.map(b => b.id === id ? { ...b, status: 'paid', payment_status: 'paid' } : b));
-        if (selectedBooking && selectedBooking.id === id) {
-          setSelectedBooking(prev => prev ? { ...prev, status: 'paid', payment_status: 'paid' } : null);
-        }
-      }
-
-      const { error } = await supabase.from('bookings').update(updates).eq('id', id);
+      const { error } = await supabase.from('bookings').update({ status: value }).eq('id', id);
       if (error) throw error;
 
       showToast('success', t('bookingSaved'));
@@ -173,7 +159,7 @@ export default function BookingManagement() {
   };
 
   const resetAddForm = () => {
-    setAddForm({ name: '', email: '', phone: '', booking_type: 'package', item_name: '', date: '', duration: '', notes: '', total_price: '', status: 'pending', payment_status: 'unpaid' });
+    setAddForm({ name: '', email: '', phone: '', booking_type: 'package', item_name: '', date: '', duration: '', notes: '', total_price: '', status: 'pending' });
     setKtpFile(null); setSimFile(null); setKtpPreview(null); setSimPreview(null);
     if (ktpInputRef.current) ktpInputRef.current.value = '';
     if (simInputRef.current) simInputRef.current.value = '';
@@ -245,6 +231,10 @@ export default function BookingManagement() {
     return badges[status] || 'bg-slate-50 text-slate-600 border border-slate-200';
   };
 
+  const getPaymentStatus = (status: string): 'paid' | 'unpaid' => {
+    return (status === 'paid' || status === 'completed') ? 'paid' : 'unpaid';
+  };
+
   const getPaymentStatusLabel = (status: string) => {
     const labels: Record<string, string> = {
       unpaid: t('unpaid'),
@@ -264,7 +254,7 @@ export default function BookingManagement() {
       `#${b.id}`.includes(searchStr);
 
     const matchStatus = statusFilter === 'all' || b.status === statusFilter;
-    const matchPayment = paymentFilter === 'all' || b.payment_status === paymentFilter;
+    const matchPayment = paymentFilter === 'all' || getPaymentStatus(b.status) === paymentFilter;
     const matchType = typeFilter === 'all' || b.booking_type === typeFilter;
 
     return matchSearch && matchStatus && matchPayment && matchType;
@@ -277,7 +267,7 @@ export default function BookingManagement() {
   const totalCount = bookings.length;
   const pendingCount = bookings.filter(b => b.status === 'pending').length;
   const confirmedCount = bookings.filter(b => b.status === 'confirmed').length;
-  const paidCount = bookings.filter(b => b.status === 'paid' || b.payment_status === 'paid').length;
+  const paidCount = bookings.filter(b => b.status === 'paid' || getPaymentStatus(b.status) === 'paid').length;
 
   const handlePrint = () => {
     window.print();
@@ -288,7 +278,7 @@ export default function BookingManagement() {
     const rows = filteredBookings.map(b => [
       b.id, `"${b.name}"`, b.email, b.phone,
       b.booking_type, `"${b.item_name}"`, b.date, b.duration,
-      `"${b.total_price}"`, b.status, b.payment_status, b.created_at.slice(0,10)
+      `"${b.total_price}"`, b.status, getPaymentStatus(b.status), b.created_at.slice(0,10)
     ]);
     const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -554,8 +544,8 @@ export default function BookingManagement() {
                       </span>
                     </td>
                     <td className="px-6 py-4.5">
-                      <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold ${getPaymentStatusBadge(b.payment_status)}`}>
-                        {getPaymentStatusLabel(b.payment_status)}
+                      <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold ${getPaymentStatusBadge(getPaymentStatus(b.status))}`}>
+                        {getPaymentStatusLabel(getPaymentStatus(b.status))}
                       </span>
                     </td>
                     <td className="px-6 py-4.5 text-right">
@@ -589,7 +579,7 @@ export default function BookingManagement() {
                         {/* Quick Confirm */}
                         {b.status === 'pending' && (
                           <button
-                            onClick={() => updateStatus(b.id, 'status', 'confirmed')}
+                            onClick={() => updateStatus(b.id, 'confirmed')}
                             title={t('confirmBooking')}
                             className="p-1.5 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"
                           >
@@ -600,7 +590,7 @@ export default function BookingManagement() {
                         {/* Quick Cancel */}
                         {b.status !== 'cancelled' && b.status !== 'completed' && (
                           <button
-                            onClick={() => updateStatus(b.id, 'status', 'cancelled')}
+                            onClick={() => updateStatus(b.id, 'cancelled')}
                             title={t('cancelBooking')}
                             className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
                           >
@@ -850,14 +840,14 @@ export default function BookingManagement() {
                     {locale === 'id' ? 'Perbarui Status' : 'Update Status'}
                   </h4>
 
-                  <div className="grid grid-cols-2 gap-3.5">
+                  <div>
                     {/* Booking Status Dropdown */}
                     <div>
                       <label className="text-xs font-medium text-slate-500 block mb-1.5">{t('status')}</label>
                       <div className="relative">
                         <select
                           value={selectedBooking.status}
-                          onChange={(e) => updateStatus(selectedBooking.id, 'status', e.target.value)}
+                          onChange={(e) => updateStatus(selectedBooking.id, e.target.value)}
                           className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-toska-500 text-sm text-slate-700 bg-white"
                         >
                           <option value="pending">{t('pending')}</option>
@@ -865,21 +855,6 @@ export default function BookingManagement() {
                           <option value="paid">{t('paid')}</option>
                           <option value="completed">{t('completed')}</option>
                           <option value="cancelled">{t('cancelled')}</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    {/* Payment Status Dropdown */}
-                    <div>
-                      <label className="text-xs font-medium text-slate-500 block mb-1.5">{t('paymentStatus')}</label>
-                      <div className="relative">
-                        <select
-                          value={selectedBooking.payment_status}
-                          onChange={(e) => updateStatus(selectedBooking.id, 'payment_status', e.target.value)}
-                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-toska-500 text-sm text-slate-700 bg-white"
-                        >
-                          <option value="unpaid">{t('unpaid')}</option>
-                          <option value="paid">{t('paid')}</option>
                         </select>
                       </div>
                     </div>
@@ -989,8 +964,8 @@ export default function BookingManagement() {
                   </div>
                   <div>
                     <span className="text-slate-500 block mb-1">{t('paymentStatus')}</span>
-                    <span className={`inline-block px-2.5 py-0.5 rounded text-[11px] font-bold ${getPaymentStatusBadge(selectedBooking.payment_status)}`}>
-                      {getPaymentStatusLabel(selectedBooking.payment_status).toUpperCase()}
+                    <span className={`inline-block px-2.5 py-0.5 rounded text-[11px] font-bold ${getPaymentStatusBadge(getPaymentStatus(selectedBooking.status))}`}>
+                      {getPaymentStatusLabel(getPaymentStatus(selectedBooking.status)).toUpperCase()}
                     </span>
                   </div>
                 </div>
@@ -1196,7 +1171,7 @@ export default function BookingManagement() {
                           className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-toska-500 text-sm text-slate-800 placeholder-slate-400"
                         />
                       </div>
-                      <div>
+                      <div className="sm:col-span-2">
                         <label className="text-xs font-medium text-slate-600 block mb-1.5">{t('status')}</label>
                         <select
                           value={addForm.status}
@@ -1208,17 +1183,6 @@ export default function BookingManagement() {
                           <option value="paid">{t('paid')}</option>
                           <option value="completed">{t('completed')}</option>
                           <option value="cancelled">{t('cancelled')}</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="text-xs font-medium text-slate-600 block mb-1.5">{t('paymentStatus')}</label>
-                        <select
-                          value={addForm.payment_status}
-                          onChange={e => setAddForm(p => ({ ...p, payment_status: e.target.value as any }))}
-                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-toska-500 text-sm text-slate-700 bg-white"
-                        >
-                          <option value="unpaid">{t('unpaid')}</option>
-                          <option value="paid">{t('paid')}</option>
                         </select>
                       </div>
                       <div className="sm:col-span-2">
