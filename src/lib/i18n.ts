@@ -57,7 +57,7 @@ const translations = {
     signUpSuccess: 'Pendaftaran berhasil! Silakan cek email Anda untuk verifikasi, lalu login.',
     loginFailed: 'Email atau kata sandi salah. Silakan coba lagi.',
     genericError: 'Terjadi kesalahan. Silakan coba lagi.',
-    copyrightText: '© 2026 ClickAndGo Journey — Wisata Bali Terpercaya',
+    copyrightText: '© 2026 ClickAndGo — Wisata Bali Terpercaya',
 
     // Admin Sidebar
     dashboard: 'Dashboard',
@@ -282,7 +282,7 @@ const translations = {
     signUpSuccess: 'Registration successful! Please check your email for verification, then login.',
     loginFailed: 'Invalid email or password. Please try again.',
     genericError: 'An error occurred. Please try again.',
-    copyrightText: '© 2026 ClickAndGo Journey — Trusted Bali Travel',
+    copyrightText: '© 2026 ClickAndGo — Trusted Bali Travel',
 
     // Admin Sidebar
     dashboard: 'Dashboard',

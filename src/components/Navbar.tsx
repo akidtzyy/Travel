@@ -75,7 +75,8 @@ export default function Navbar() {
             </span>
           </Link>
 
-          <div className="hidden lg:flex items-center gap-8">
+          {/* Navigation Links */}
+          <div className="hidden lg:flex items-center gap-6">
             {navLinks.map(link => (
               link.href.startsWith('/') && link.href.includes('#') ? (
                 <a
@@ -99,6 +100,10 @@ export default function Navbar() {
                 </Link>
               )
             ))}
+          </div>
+
+          {/* Action Buttons */}
+          <div className="hidden lg:flex items-center gap-4">
             <a
               href="/#booking"
               className="bg-toska-500 hover:bg-toska-600 text-white px-6 py-2.5 rounded-full text-sm font-semibold transition-all hover:shadow-lg hover:shadow-toska-500/25"

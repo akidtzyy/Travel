@@ -6,6 +6,7 @@ import Hero from '../components/Hero';
 import PackageCard from '../components/PackageCard';
 import supabase from '../lib/supabase';
 import { useAuth } from '../lib/AuthContext';
+import { useI18n } from '../lib/I18nContext';
 
 interface TourPackage {
   id: number;
@@ -84,6 +85,7 @@ const fadeInUp = {
 
 export default function Home() {
   const { user, isLoggedIn } = useAuth();
+  const { t, locale, translateText } = useI18n();
 
   const [packages, setPackages] = useState<TourPackage[]>([]);
   const [carRentals, setCarRentals] = useState<CarRental[]>([]);
@@ -231,7 +233,7 @@ export default function Home() {
 
   const handleBooking = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Format pesan WhatsApp
+    // Format pesan WhatsApp (selalu gunakan bahasa Indonesia untuk admin)
     const message = `*BOOKING BARU - ClickAndGo*%0A%0A` +
       `Halo Admin ClickAndGo,%0A%0A` +
       `Saya ingin melakukan pemesanan dengan rincian sebagai berikut:%0A%0A` +
@@ -252,6 +254,25 @@ export default function Home() {
     // Nomor WhatsApp admin (ganti dengan nomor Anda)
     const whatsappNumber = '6281243499265'; // Format: 62xxx (tanpa + atau 0)
     
+    try {
+      setBookingLoading(true);
+      const notesWithDetails = `Tipe: ${bookingForm.booking_type === 'package' ? 'Paket Wisata' : 'Sewa Mobil'}\nItem: ${bookingForm.item_name}\nJumlah/Durasi: ${bookingForm.duration}\nTanggal: ${bookingForm.date}\nHarga: ${bookingForm.total_price}\nCatatan: ${bookingForm.notes}`;
+      
+      const { error } = await supabase.from('customers').insert({
+        full_name: bookingForm.name,
+        phone: bookingForm.phone,
+        email: bookingForm.email,
+        booking_status: 'booked',
+        notes: notesWithDetails
+      });
+      if (error) throw error;
+      setBookingSuccess(true);
+    } catch (err) {
+      console.error("Gagal menyimpan data booking ke database:", err);
+    } finally {
+      setBookingLoading(false);
+    }
+
     // Redirect ke WhatsApp
     window.open(`https://wa.me/${whatsappNumber}?text=${message}`, '_blank');
     
@@ -261,7 +282,6 @@ export default function Home() {
     setSelectedHotelIdx(0);
     setSelectedPaxKey('');
     setSelectedCarId('');
-    setBookingSuccess(true);
     setTimeout(() => setBookingSuccess(false), 5000);
   };
 
@@ -294,18 +314,20 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div {...fadeInUp} className="text-center mb-16">
             <h2 className="text-3xl sm:text-4xl font-bold text-ocean-900 font-[family-name:var(--font-display)] mb-6">
-              Mengapa Memilih Kami?
+              {t('whyChooseUs')}
             </h2>
             <p className="text-ocean-600 max-w-2xl mx-auto leading-relaxed">
-              Kami berkomitmen memberikan pengalaman wisata terbaik dengan layanan profesional dan harga terjangkau
+              {locale === 'id' 
+                ? 'Kami berkomitmen memberikan pengalaman wisata terbaik dengan layanan profesional dan harga terjangkau' 
+                : 'We are committed to providing the best travel experience with professional service and affordable prices'}
             </p>
           </motion.div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
             {[
-              { icon: Shield, title: 'Terpercaya', desc: 'Berpengalaman lebih dari 5 tahun melayani wisatawan domestik & mancanegara' },
-              { icon: Sparkles, title: 'Premium Quality', desc: 'Armada terawat, driver profesional, dan itinerary yang dirancang sempurna' },
-              { icon: Heart, title: 'Harga Terbaik', desc: 'Harga kompetitif tanpa biaya tersembunyi, transparan dan jujur' },
-              { icon: Phone, title: 'Support 24/7', desc: 'Tim kami siap membantu Anda kapan saja selama perjalanan di Bali' },
+              { icon: Shield, title: locale === 'id' ? 'Terpercaya' : 'Trusted', desc: locale === 'id' ? 'Berpengalaman lebih dari 5 tahun melayani wisatawan domestik & mancanegara' : 'Over 5 years of experience serving domestic & international tourists' },
+              { icon: Sparkles, title: locale === 'id' ? 'Kualitas Premium' : 'Premium Quality', desc: locale === 'id' ? 'Armada terawat, driver profesional, dan itinerary yang dirancang sempurna' : 'Well-maintained fleet, professional drivers, and perfectly designed itineraries' },
+              { icon: Heart, title: locale === 'id' ? 'Harga Terbaik' : 'Best Prices', desc: locale === 'id' ? 'Harga kompetitif tanpa biaya tersembunyi, transparan dan jujur' : 'Competitive rates with no hidden fees, transparent and honest' },
+              { icon: Phone, title: t('support247'), desc: locale === 'id' ? 'Tim kami siap membantu Anda kapan saja selama perjalanan di Bali' : 'Our team is ready to assist you anytime during your trip in Bali' },
             ].map((item, i) => (
               <motion.div
                 key={i}
@@ -330,13 +352,14 @@ export default function Home() {
       <section id="paket" className="py-28 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div {...fadeInUp} className="text-center mb-14">
-            <span className="text-toska-500 font-semibold text-sm uppercase tracking-wider">Paket Wisata Triya Bali</span>
+            <span className="text-toska-500 font-semibold text-sm uppercase tracking-wider">{locale === 'id' ? 'Paket Wisata Bali' : 'Bali Tour Packages'}</span>
             <h2 className="text-3xl sm:text-4xl font-bold text-ocean-900 font-[family-name:var(--font-display)] mt-4 mb-6">
-              Paket Tour Bali Lengkap
+              {locale === 'id' ? 'Paket Tour Bali Lengkap' : 'Complete Bali Tour Packages'}
             </h2>
             <p className="text-ocean-600 max-w-2xl mx-auto leading-relaxed">
-              Pilih paket wisata yang sesuai dengan kebutuhan Anda. Semua paket termasuk akomodasi hotel, transportasi, guide, dan makan sesuai itinerary. 
-              Tersedia berbagai pilihan hotel dan harga spesial untuk grup besar (15+1 FOC).
+              {locale === 'id'
+                ? 'Pilih paket wisata yang sesuai dengan kebutuhan Anda. Semua paket termasuk akomodasi hotel, transportasi, guide, dan makan sesuai itinerary. Tersedia berbagai pilihan hotel dan harga spesial untuk grup besar (15+1 FOC).'
+                : 'Select a tour package that suits your needs. All packages include hotel accommodation, transportation, guide, and meals as per itinerary. Various hotel options and special rates for large groups (15+1 FOC) are available.'}
             </p>
           </motion.div>
 
@@ -351,7 +374,7 @@ export default function Home() {
                     : 'bg-ocean-50 text-ocean-700 hover:bg-ocean-100'
                 }`}
               >
-                {cat === 'Honeymoon' ? '💕 Honeymoon' : cat === '3D2N' ? '🌴 3 Hari 2 Malam' : cat}
+                {cat === 'Semua' ? t('all') : cat === 'Honeymoon' ? '💕 Honeymoon' : cat === '3D2N' ? '🌴 ' + translateText('3 Hari 2 Malam') : translateText(cat)}
               </button>
             ))}
           </div>
@@ -363,7 +386,6 @@ export default function Home() {
                 key={pkg.id} 
                 pkg={pkg} 
                 index={index}
-                // 🟢 PERBAIKAN 2: Simpan ID paket sebagai 'number' sesuai tipe datanya, bukan string
                 onSelect={(selectedPkg, hotel, pax, price) => {
                   setSelectedPkgId(selectedPkg.id); 
                   const hotelIdx = selectedPkg.included.hotels.findIndex(h => h.hotel === hotel);
@@ -372,7 +394,7 @@ export default function Home() {
                   setBookingForm(p => ({
                     ...p,
                     booking_type: 'package',
-                    item_name: `${selectedPkg.name} — ${hotel}`,
+                    item_name: `${translateText(selectedPkg.name)} — ${hotel}`,
                     duration: paxLabels[pax] || pax,
                     total_price: formatPrice(price)
                   }));
@@ -388,7 +410,7 @@ export default function Home() {
             <div className="inline-flex items-center gap-3 bg-toska-50 border border-toska-200 px-8 py-4.5 rounded-full">
               <Sparkles className="w-5 h-5 text-toska-600 shrink-0" />
               <span className="text-sm font-medium text-toska-800">
-                <strong>Spesial:</strong> 15+1 FOC, 20+1 FOC, 25+1 FOC, 30+1 FOC — Gratis 1 orang untuk grup besar!
+                <strong>{locale === 'id' ? 'Spesial:' : 'Special:'}</strong> 15+1 FOC, 20+1 FOC, 25+1 FOC, 30+1 FOC — {locale === 'id' ? 'Gratis 1 orang untuk grup besar!' : 'Free 1 person for large groups!'}
               </span>
             </div>
           </motion.div>
@@ -399,12 +421,14 @@ export default function Home() {
       <section id="destinasi" className="py-28 bg-gradient-to-b from-ocean-50 to-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div {...fadeInUp} className="text-center mb-16">
-            <span className="text-toska-500 font-semibold text-sm uppercase tracking-wider">Destinasi Unggulan</span>
+            <span className="text-toska-500 font-semibold text-sm uppercase tracking-wider">{locale === 'id' ? 'Destinasi Unggulan' : 'Featured Destinations'}</span>
             <h2 className="text-3xl sm:text-4xl font-bold text-ocean-900 font-[family-name:var(--font-display)] mt-4 mb-6">
-              Tempat Wajib Dikunjungi
+              {locale === 'id' ? 'Tempat Wajib Dikunjungi' : 'Places You Must Visit'}
             </h2>
             <p className="text-ocean-600 max-w-2xl mx-auto leading-relaxed">
-              Destinasi terbaik di Bali yang menawarkan pengalaman unik dan pemandangan memukau
+              {locale === 'id'
+                ? 'Destinasi terbaik di Bali yang menawarkan pengalaman unik dan pemandangan memukau'
+                : 'The best destinations in Bali offering unique experiences and breathtaking views'}
             </p>
           </motion.div>
 
@@ -420,7 +444,7 @@ export default function Home() {
               >
                 <img
                   src={dest.image_url}
-                  alt={dest.name}
+                  alt={translateText(dest.name)}
                   className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-ocean-900/80 via-ocean-900/20 to-transparent" />
@@ -428,10 +452,10 @@ export default function Home() {
                   <div className="flex items-center gap-1 mb-2">
                     <Star className="w-4 h-4 text-yellow-400 fill-yellow-400" />
                     <span className="text-white text-sm font-medium">{dest.rating}</span>
-                    <span className="text-white/60 text-xs ml-1">{dest.category}</span>
+                    <span className="text-white/60 text-xs ml-1">{translateText(dest.category)}</span>
                   </div>
-                  <h3 className="text-xl font-bold text-white font-[family-name:var(--font-display)]">{dest.name}</h3>
-                  <p className="text-white/70 text-sm mt-1 line-clamp-2">{dest.description}</p>
+                  <h3 className="text-xl font-bold text-white font-[family-name:var(--font-display)]">{translateText(dest.name)}</h3>
+                  <p className="text-white/70 text-sm mt-1 line-clamp-2">{translateText(dest.description)}</p>
                 </div>
               </motion.div>
             ))}
@@ -449,10 +473,12 @@ export default function Home() {
           <div className="flex flex-col lg:flex-row items-center justify-between gap-10">
             <div>
               <h2 className="text-3xl sm:text-4xl font-bold text-white font-[family-name:var(--font-display)] mb-5">
-                Butuh Transportasi di Bali?
+                {locale === 'id' ? 'Butuh Transportasi di Bali?' : 'Need Transportation in Bali?'}
               </h2>
               <p className="text-ocean-200 text-lg max-w-xl leading-relaxed">
-                Sewa mobil dengan atau tanpa driver. Armada lengkap dari city car hingga bus besar untuk rombongan.
+                {locale === 'id'
+                  ? 'Sewa mobil dengan atau tanpa driver. Armada lengkap dari city car hingga bus besar untuk rombongan.'
+                  : 'Rent a car with or without driver. Complete fleet from city cars to large buses for groups.'}
               </p>
             </div>
             <Link
@@ -460,7 +486,7 @@ export default function Home() {
               className="flex items-center gap-3 bg-toska-500 hover:bg-toska-600 text-white px-8 py-4 rounded-full text-lg font-semibold transition-all hover:shadow-xl hover:shadow-toska-500/30 shrink-0"
             >
               <Car className="w-5 h-5" />
-              Lihat Armada
+              {locale === 'id' ? 'Lihat Armada' : 'View Fleet'}
             </Link>
           </div>
         </div>
@@ -470,12 +496,12 @@ export default function Home() {
       <section id="testimoni" className="py-28 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div {...fadeInUp} className="text-center mb-16">
-            <span className="text-toska-500 font-semibold text-sm uppercase tracking-wider">Testimoni</span>
+            <span className="text-toska-500 font-semibold text-sm uppercase tracking-wider">{t('testimonials')}</span>
             <h2 className="text-3xl sm:text-4xl font-bold text-ocean-900 font-[family-name:var(--font-display)] mt-4 mb-6">
-              Kata Mereka Tentang Kami
+              {t('whatTheySay')}
             </h2>
             <p className="text-ocean-600 max-w-2xl mx-auto leading-relaxed">
-              Cerita dan kesan dari para traveler yang telah mempercayakan liburan mereka bersama kami
+              {t('whatTheySaySubtitle')}
             </p>
           </motion.div>
 
@@ -494,14 +520,14 @@ export default function Home() {
                     <Star key={j} className="w-4 h-4 text-yellow-400 fill-yellow-400" />
                   ))}
                 </div>
-                <p className="text-ocean-700 text-sm leading-relaxed mb-6 italic">"{test.text}"</p>
+                <p className="text-ocean-700 text-sm leading-relaxed mb-6 italic">"{translateText(test.text)}"</p>
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-full bg-toska-100 flex items-center justify-center">
                     <span className="text-toska-700 font-bold text-sm">{test.name.charAt(0)}</span>
                   </div>
                   <div>
-                    <p className="font-semibold text-ocean-900 text-sm">{test.name}</p>
-                    <p className="text-ocean-500 text-xs">{test.origin} · {test.trip_date}</p>
+                    <p className="font-semibold text-ocean-900 text-sm">{translateText(test.name)}</p>
+                    <p className="text-ocean-500 text-xs">{translateText(test.origin)} · {translateText(test.trip_date)}</p>
                   </div>
                 </div>
               </motion.div>
@@ -514,12 +540,12 @@ export default function Home() {
       <section id="faq" className="py-28 bg-ocean-50">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div {...fadeInUp} className="text-center mb-16">
-            <span className="text-toska-500 font-semibold text-sm uppercase tracking-wider">FAQ</span>
+            <span className="text-toska-500 font-semibold text-sm uppercase tracking-wider">{t('faq')}</span>
             <h2 className="text-3xl sm:text-4xl font-bold text-ocean-900 font-[family-name:var(--font-display)] mt-4 mb-6">
-              Pertanyaan Umum
+              {t('faqTitle')}
             </h2>
             <p className="text-ocean-600 leading-relaxed">
-              Jawaban untuk pertanyaan yang sering ditanyakan seputar layanan kami
+              {t('faqSubtitle')}
             </p>
           </motion.div>
 
@@ -536,7 +562,7 @@ export default function Home() {
                   onClick={() => setOpenFaq(openFaq === faq.id ? null : faq.id)}
                   className="w-full flex items-center justify-between p-6 text-left hover:bg-ocean-50 transition-colors"
                 >
-                  <span className="font-semibold text-ocean-900 text-sm pr-4">{faq.question}</span>
+                  <span className="font-semibold text-ocean-900 text-sm pr-4">{translateText(faq.question)}</span>
                   {openFaq === faq.id ? (
                     <ChevronUp className="w-5 h-5 text-toska-500 shrink-0" />
                   ) : (
@@ -549,7 +575,7 @@ export default function Home() {
                     animate={{ opacity: 1, height: 'auto' }}
                     className="px-6 pb-6"
                   >
-                    <p className="text-ocean-600 text-sm leading-relaxed">{faq.answer}</p>
+                    <p className="text-ocean-600 text-sm leading-relaxed">{translateText(faq.answer)}</p>
                   </motion.div>
                 )}
               </motion.div>
@@ -562,14 +588,18 @@ export default function Home() {
       <section id="booking" className="py-28 bg-white">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div {...fadeInUp} className="text-center mb-16">
-            <span className="text-toska-500 font-semibold text-sm uppercase tracking-wider">Reservasi</span>
+            <span className="text-toska-500 font-semibold text-sm uppercase tracking-wider">{locale === 'id' ? 'Reservasi' : 'Reservation'}</span>
             <h2 className="text-3xl sm:text-4xl font-bold text-ocean-900 font-[family-name:var(--font-display)] mt-4 mb-6">
-              Booking Sekarang
+              {t('bookingNow')}
             </h2>
             <p className="text-ocean-600 leading-relaxed">
               {isLoggedIn
-                ? 'Pilih paket atau kendaraan yang Anda inginkan, lalu lengkapi data diri. Tim kami akan segera menghubungi Anda.'
-                : 'Silakan masuk atau daftar terlebih dahulu untuk melakukan pemesanan.'}
+                ? (locale === 'id' 
+                  ? 'Pilih paket atau kendaraan yang Anda inginkan, lalu lengkapi data diri. Tim kami akan segera menghubungi Anda.' 
+                  : 'Select the package or vehicle you want, then complete your details. Our team will contact you shortly.')
+                : (locale === 'id'
+                  ? 'Silakan masuk atau daftar terlebih dahulu untuk melakukan pemesanan.'
+                  : 'Please sign in or register first to make a booking.')}
             </p>
           </motion.div>
 
@@ -585,11 +615,12 @@ export default function Home() {
                 <LogIn className="w-10 h-10 text-white" />
               </div>
               <h3 className="text-2xl font-bold text-ocean-900 font-[family-name:var(--font-display)] mb-5">
-                Masuk untuk Booking
+                {locale === 'id' ? 'Masuk untuk Booking' : 'Sign In to Book'}
               </h3>
               <p className="text-ocean-600 max-w-md mx-auto mb-12 text-sm leading-relaxed">
-                Untuk melakukan pemesanan paket wisata atau sewa mobil, Anda perlu masuk ke akun terlebih dahulu. 
-                Belum punya akun? Daftar gratis hanya dalam beberapa detik!
+                {locale === 'id'
+                  ? 'Untuk melakukan pemesanan paket wisata atau sewa mobil, Anda perlu masuk ke akun terlebih dahulu. Belum punya akun? Daftar gratis hanya dalam beberapa detik!'
+                  : 'To book a tour package or rent a car, you need to sign in to your account first. Don\'t have an account? Register for free in just a few seconds!'}
               </p>
               <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
                 <Link
@@ -597,17 +628,17 @@ export default function Home() {
                   className="flex items-center gap-2 bg-gradient-to-r from-toska-500 to-ocean-500 hover:from-toska-600 hover:to-ocean-600 text-white px-8 py-3.5 rounded-xl font-semibold text-sm transition-all hover:shadow-lg hover:shadow-toska-500/25"
                 >
                   <LogIn className="w-4 h-4" />
-                  Masuk / Daftar
+                  {t('signIn')} / {t('signUp')}
                 </Link>
               </div>
               <div className="mt-12 flex items-center justify-center gap-8 text-xs text-ocean-500">
                 <div className="flex items-center gap-1.5">
                   <Shield className="w-4 h-4 text-toska-500" />
-                  Data aman & terenkripsi
+                  {locale === 'id' ? 'Data aman & terenkripsi' : 'Safe & encrypted data'}
                 </div>
                 <div className="flex items-center gap-1.5">
                   <Sparkles className="w-4 h-4 text-toska-500" />
-                  Gratis tanpa biaya
+                  {locale === 'id' ? 'Gratis tanpa biaya' : 'Free of charge'}
                 </div>
               </div>
             </motion.div>
@@ -633,7 +664,7 @@ export default function Home() {
                 </div>
                 <div className="flex items-center gap-1.5 bg-green-100 text-green-700 px-3 py-1.5 rounded-full text-xs font-semibold shrink-0">
                   <UserCheck className="w-3.5 h-3.5" />
-                  Terverifikasi
+                  {locale === 'id' ? 'Terverifikasi' : 'Verified'}
                 </div>
               </motion.div>
 
@@ -644,7 +675,11 @@ export default function Home() {
               className="bg-green-50 border border-green-200 text-green-800 rounded-xl p-4 mb-10 flex items-center gap-3"
             >
               <CheckCircle className="w-5 h-5 text-green-500 shrink-0" />
-              <span className="text-sm font-medium">Booking berhasil dikirim! Tim kami akan menghubungi Anda dalam 1x24 jam.</span>
+              <span className="text-sm font-medium">
+                {locale === 'id'
+                  ? 'Booking berhasil dikirim! Tim kami akan menghubungi Anda dalam 1x24 jam.'
+                  : 'Booking successfully sent! Our team will contact you within 24 hours.'}
+              </span>
             </motion.div>
           )}
 
@@ -652,7 +687,7 @@ export default function Home() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-7">
               {/* Nama */}
               <div>
-                <label className="block text-sm font-medium text-ocean-800 mb-2">Nama Lengkap *</label>
+                <label className="block text-sm font-medium text-ocean-800 mb-2">{t('fullName')} *</label>
                 <input
                   type="text"
                   required
@@ -660,12 +695,12 @@ export default function Home() {
                   readOnly={!!user?.user_metadata?.full_name}
                   onChange={e => setBookingForm(p => ({ ...p, name: e.target.value }))}
                   className={`w-full px-4 py-3 rounded-xl border border-ocean-200 focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm ${user?.user_metadata?.full_name ? 'bg-ocean-100 text-ocean-600 cursor-not-allowed' : 'bg-white'}`}
-                  placeholder="Nama Anda"
+                  placeholder={locale === 'id' ? 'Nama Anda' : 'Your Name'}
                 />
               </div>
               {/* Email */}
               <div>
-                <label className="block text-sm font-medium text-ocean-800 mb-2">Email *</label>
+                <label className="block text-sm font-medium text-ocean-800 mb-2">{t('emailAddress')} *</label>
                 <input
                   type="email"
                   required
@@ -678,7 +713,7 @@ export default function Home() {
               </div>
               {/* WhatsApp */}
               <div>
-                <label className="block text-sm font-medium text-ocean-800 mb-2">No. WhatsApp *</label>
+                <label className="block text-sm font-medium text-ocean-800 mb-2">{t('whatsAppNumber')} *</label>
                 <input
                   type="tel"
                   required
@@ -690,26 +725,23 @@ export default function Home() {
                     setBookingForm(p => ({ ...p, phone: value }));
                   }}
                   onKeyDown={e => {
-                    // Allow: backspace, delete, tab, escape, enter, arrows
                     if ([8, 9, 27, 13, 46, 37, 39].includes(e.keyCode) ||
-                        // Allow Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+X
                         (e.ctrlKey && [65, 67, 86, 88].includes(e.keyCode))) {
                       return;
                     }
-                    // Block non-numeric keys
-                    if ((e.keyCode < 48 || e.keyCode > 57) && // number keys
-                        (e.keyCode < 96 || e.keyCode > 105)) { // numpad keys
+                    if ((e.keyCode < 48 || e.keyCode > 57) &&
+                        (e.keyCode < 96 || e.keyCode > 105)) {
                       e.preventDefault();
                     }
                   }}
                   className="w-full px-4 py-3 rounded-xl border border-ocean-200 bg-white focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm"
                   placeholder="08xxxxxxxxxx"
                 />
-                <p className="text-xs text-ocean-500 mt-1.5">Hanya angka yang diperbolehkan</p>
+                <p className="text-xs text-ocean-500 mt-1.5">{locale === 'id' ? 'Hanya angka yang diperbolehkan' : 'Only numbers allowed'}</p>
               </div>
               {/* Tanggal */}
               <div>
-                <label className="block text-sm font-medium text-ocean-800 mb-2">Tanggal Perjalanan *</label>
+                <label className="block text-sm font-medium text-ocean-800 mb-2">{bookingForm.booking_type === 'package' ? t('startDateTour') : t('startDateRent')} *</label>
                 <input
                   type="date"
                   required
@@ -721,7 +753,7 @@ export default function Home() {
 
               {/* Tipe Booking */}
               <div className="sm:col-span-2">
-                <label className="block text-sm font-medium text-ocean-800 mb-2.5">Tipe Booking *</label>
+                <label className="block text-sm font-medium text-ocean-800 mb-2.5">{t('bookingType')} *</label>
                 <div className="grid grid-cols-2 gap-4">
                   <button
                     type="button"
@@ -732,7 +764,7 @@ export default function Home() {
                         : 'bg-white text-ocean-700 border-ocean-200 hover:border-toska-300'
                     }`}
                   >
-                    🌴 Paket Wisata
+                    🌴 {t('tourPackages')}
                   </button>
                   <button
                     type="button"
@@ -743,7 +775,7 @@ export default function Home() {
                         : 'bg-white text-ocean-700 border-ocean-200 hover:border-toska-300'
                     }`}
                   >
-                    🚗 Sewa Mobil
+                    🚗 {t('carRental')}
                   </button>
                 </div>
               </div>
@@ -753,16 +785,16 @@ export default function Home() {
                 <>
                   {/* Pilih Paket */}
                   <div className="sm:col-span-2">
-                    <label className="block text-sm font-medium text-ocean-800 mb-2">Pilih Paket Wisata *</label>
+                    <label className="block text-sm font-medium text-ocean-800 mb-2">{t('selectTourPackage')} *</label>
                     <select
                       required
                       value={selectedPkgId}
                       onChange={e => handlePkgChange(e.target.value ? Number(e.target.value) : '')}
                       className="w-full px-4 py-3 rounded-xl border border-ocean-200 bg-white focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm"
                     >
-                      <option value="">— Pilih paket —</option>
+                      <option value="">— {locale === 'id' ? 'Pilih paket' : 'Select package'} —</option>
                       {packages.map(pkg => (
-                        <option key={pkg.id} value={pkg.id}>{pkg.name} ({pkg.duration})</option>
+                        <option key={pkg.id} value={pkg.id}>{translateText(pkg.name)} ({translateText(pkg.duration)})</option>
                       ))}
                     </select>
                   </div>
@@ -770,7 +802,7 @@ export default function Home() {
                   {/* Pilih Hotel */}
                   {selectedPkg && (
                     <div className="sm:col-span-2">
-                      <label className="block text-sm font-medium text-ocean-800 mb-2.5">Pilih Hotel *</label>
+                      <label className="block text-sm font-medium text-ocean-800 mb-2.5">{t('selectHotelOption')} *</label>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         {selectedPkg.included.hotels.map((h, i) => (
                           <button
@@ -793,17 +825,17 @@ export default function Home() {
                   {/* Pilih Jumlah Peserta */}
                   {selectedPkg && selectedHotel && (
                     <div className="sm:col-span-2">
-                      <label className="block text-sm font-medium text-ocean-800 mb-2">Jumlah Peserta *</label>
+                      <label className="block text-sm font-medium text-ocean-800 mb-2">{t('selectPaxCapacity')} *</label>
                       <select
                         required
                         value={selectedPaxKey}
                         onChange={e => setSelectedPaxKey(e.target.value)}
                         className="w-full px-4 py-3 rounded-xl border border-ocean-200 bg-white focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm"
                       >
-                        <option value="">— Pilih jumlah peserta —</option>
+                        <option value="">— {locale === 'id' ? 'Pilih jumlah peserta' : 'Select number of participants'} —</option>
                         {paxOptions.map(opt => (
                           <option key={opt.key} value={opt.key}>
-                            {opt.label} — {formatPrice(opt.price)}/pax
+                            {opt.label} — {formatPrice(opt.price)}/{t('pax')}
                           </option>
                         ))}
                       </select>
@@ -819,7 +851,7 @@ export default function Home() {
                       </div>
                       <div className="text-right">
                         <p className="text-xl font-bold text-toska-700">{formatPrice(computedPrice)}</p>
-                        <p className="text-xs text-toska-600">/pax</p>
+                        <p className="text-xs text-toska-600">/{selectedPkg?.category === 'Honeymoon' ? t('couple') : t('pax')}</p>
                       </div>
                     </div>
                   )}
@@ -831,46 +863,46 @@ export default function Home() {
                 <>
                   {/* Tipe Sewa */}
                   <div className="sm:col-span-2">
-                    <label className="block text-sm font-medium text-ocean-800 mb-2.5">Tipe Sewa *</label>
+                    <label className="block text-sm font-medium text-ocean-800 mb-2.5">{t('carType')} *</label>
                     <div className="grid grid-cols-2 gap-4">
                       <button
                         type="button"
                         onClick={() => { setCarFilterType('self_drive'); setSelectedCarId(''); }}
                         className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold transition-all border ${
                           carFilterType === 'self_drive'
-                            ? 'bg-ocean-900 text-white border-ocean-900'
-                            : 'bg-white text-ocean-700 border-ocean-200 hover:border-ocean-400'
+                            ? 'bg-toska-500 text-white border-toska-500 shadow-md'
+                            : 'bg-white text-ocean-700 border-ocean-200 hover:border-toska-300'
                         }`}
                       >
-                        🔑 Self Drive
+                        🔑 {t('selfDrive')}
                       </button>
                       <button
                         type="button"
                         onClick={() => { setCarFilterType('with_driver'); setSelectedCarId(''); }}
                         className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold transition-all border ${
                           carFilterType === 'with_driver'
-                            ? 'bg-ocean-900 text-white border-ocean-900'
-                            : 'bg-white text-ocean-700 border-ocean-200 hover:border-ocean-400'
+                            ? 'bg-toska-500 text-white border-toska-500 shadow-md'
+                            : 'bg-white text-ocean-700 border-ocean-200 hover:border-toska-300'
                         }`}
                       >
-                        👤 With Driver
+                        👤 {t('withDriver')}
                       </button>
                     </div>
                   </div>
 
                   {/* Pilih Kendaraan */}
                   <div className="sm:col-span-2">
-                    <label className="block text-sm font-medium text-ocean-800 mb-2">Pilih Kendaraan *</label>
+                    <label className="block text-sm font-medium text-ocean-800 mb-2">{t('selectCarRental')} *</label>
                     <select
                       required
                       value={selectedCarId}
                       onChange={e => setSelectedCarId(e.target.value ? Number(e.target.value) : '')}
                       className="w-full px-4 py-3 rounded-xl border border-ocean-200 bg-white focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm"
                     >
-                      <option value="">— Pilih kendaraan —</option>
+                      <option value="">— {locale === 'id' ? 'Pilih kendaraan' : 'Select vehicle'} —</option>
                       {filteredCars.map(car => (
                         <option key={car.id} value={car.id}>
-                          {car.name} ({car.seats} Seat) — {formatPrice(car.price)} / {car.duration_desc}
+                          {translateText(car.name)} ({car.seats} Seat) — {formatPrice(car.price)} / {translateText(car.duration_desc)}
                         </option>
                       ))}
                     </select>
@@ -879,13 +911,13 @@ export default function Home() {
                   {/* Durasi Sewa */}
                   {selectedCar && (
                     <div>
-                      <label className="block text-sm font-medium text-ocean-800 mb-2">Durasi Sewa</label>
+                      <label className="block text-sm font-medium text-ocean-800 mb-2">{t('rentDuration')}</label>
                       <input
                         type="text"
                         value={bookingForm.duration}
                         onChange={e => setBookingForm(p => ({ ...p, duration: e.target.value }))}
                         className="w-full px-4 py-3 rounded-xl border border-ocean-200 bg-white focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm"
-                        placeholder="Contoh: 2 hari"
+                        placeholder={locale === 'id' ? 'Contoh: 2 hari' : 'Example: 2 days'}
                       />
                     </div>
                   )}
@@ -894,12 +926,12 @@ export default function Home() {
                   {selectedCar && (
                     <div className={`${selectedCar ? '' : 'sm:col-span-2'} bg-toska-50 border border-toska-200 rounded-xl p-4 flex items-center justify-between ${selectedCar ? 'sm:col-span-1' : ''}`}>
                       <div>
-                        <p className="text-xs text-toska-700 font-medium">{selectedCar.name}</p>
-                        <p className="text-xs text-toska-600">{selectedCar.seats} Seat · {selectedCar.duration_desc}</p>
+                        <p className="text-xs text-toska-700 font-medium">{translateText(selectedCar.name)}</p>
+                        <p className="text-xs text-toska-600">{selectedCar.seats} Seat · {translateText(selectedCar.duration_desc)}</p>
                       </div>
                       <div className="text-right">
                         <p className="text-xl font-bold text-toska-700">{formatPrice(selectedCar.price)}</p>
-                        <p className="text-xs text-toska-600">{selectedCar.duration_desc}</p>
+                        <p className="text-xs text-toska-600">{translateText(selectedCar.duration_desc)}</p>
                       </div>
                     </div>
                   )}
@@ -908,13 +940,13 @@ export default function Home() {
 
               {/* Catatan */}
               <div className="sm:col-span-2">
-                <label className="block text-sm font-medium text-ocean-800 mb-2">Catatan Tambahan</label>
+                <label className="block text-sm font-medium text-ocean-800 mb-2">{t('additionalNotes')}</label>
                 <textarea
                   rows={3}
                   value={bookingForm.notes}
                   onChange={e => setBookingForm(p => ({ ...p, notes: e.target.value }))}
                   className="w-full px-4 py-3 rounded-xl border border-ocean-200 bg-white focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm resize-none"
-                  placeholder="Permintaan khusus, preferensi, dll."
+                  placeholder={locale === 'id' ? 'Permintaan khusus, preferensi, dll.' : 'Special requests, preferences, etc.'}
                 />
               </div>
             </div>
@@ -928,7 +960,7 @@ export default function Home() {
               ) : (
                 <>
                   <Send className="w-5 h-5" />
-                  Kirim Booking
+                  {t('bookingNow')}
                 </>
               )}
             </button>
@@ -948,7 +980,9 @@ export default function Home() {
                 <span className="text-xl font-bold font-[family-name:var(--font-display)]">ClickAndGo</span>
               </div>
               <p className="text-ocean-300 text-sm leading-relaxed mb-6">
-                Partner wisata terpercaya Anda di Bali. Melayani dengan sepenuh hati untuk pengalaman liburan yang tak terlupakan.
+                {locale === 'id'
+                  ? 'Partner wisata terpercaya Anda di Bali. Melayani dengan sepenuh hati untuk pengalaman liburan yang tak terlupakan.'
+                  : 'Your trusted travel partner in Bali. Serving with heart for an unforgettable vacation experience.'}
               </p>
               <div className="flex gap-3">
                 <a
@@ -974,7 +1008,7 @@ export default function Home() {
                   </svg>
                 </a>
                 <a
-                  href="https://wa.me/6281234567890"
+                  href="https://wa.me/6281243499265"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="w-10 h-10 bg-ocean-800 hover:bg-green-500 rounded-lg flex items-center justify-center transition-all hover:scale-110"
@@ -987,25 +1021,25 @@ export default function Home() {
               </div>
             </div>
             <div>
-              <h4 className="font-bold text-lg mb-5 font-[family-name:var(--font-display)]">Layanan</h4>
+              <h4 className="font-bold text-lg mb-5 font-[family-name:var(--font-display)]">{locale === 'id' ? 'Layanan' : 'Services'}</h4>
               <ul className="space-y-2.5 text-ocean-300 text-sm">
-                <li><a href="#paket" className="hover:text-toska-400 transition-colors">Paket Wisata</a></li>
-                <li><Link to="/sewa-mobil" className="hover:text-toska-400 transition-colors">Sewa Mobil</Link></li>
-                <li><a href="#booking" className="hover:text-toska-400 transition-colors">Booking Online</a></li>
-                <li><a href="#destinasi" className="hover:text-toska-400 transition-colors">Destinasi</a></li>
+                <li><a href="#paket" className="hover:text-toska-400 transition-colors">{locale === 'id' ? 'Paket Wisata' : 'Tour Packages'}</a></li>
+                <li><Link to="/sewa-mobil" className="hover:text-toska-400 transition-colors">{t('carRental')}</Link></li>
+                <li><a href="#booking" className="hover:text-toska-400 transition-colors">{locale === 'id' ? 'Booking Online' : 'Online Booking'}</a></li>
+                <li><a href="#destinasi" className="hover:text-toska-400 transition-colors">{t('destinations')}</a></li>
               </ul>
             </div>
             <div>
-              <h4 className="font-bold text-lg mb-5 font-[family-name:var(--font-display)]">Informasi</h4>
+              <h4 className="font-bold text-lg mb-5 font-[family-name:var(--font-display)]">{locale === 'id' ? 'Informasi' : 'Information'}</h4>
               <ul className="space-y-2.5 text-ocean-300 text-sm">
-                <li><a href="#faq" className="hover:text-toska-400 transition-colors">FAQ</a></li>
-                <li><a href="#testimoni" className="hover:text-toska-400 transition-colors">Testimoni</a></li>
-                <li><span className="hover:text-toska-400 transition-colors cursor-pointer">Syarat & Ketentuan</span></li>
-                <li><span className="hover:text-toska-400 transition-colors cursor-pointer">Kebijakan Privasi</span></li>
+                <li><a href="#faq" className="hover:text-toska-400 transition-colors">{t('faq')}</a></li>
+                <li><a href="#testimoni" className="hover:text-toska-400 transition-colors">{t('testimonials')}</a></li>
+                <li><span className="hover:text-toska-400 transition-colors cursor-pointer">{locale === 'id' ? 'Syarat & Ketentuan' : 'Terms & Conditions'}</span></li>
+                <li><span className="hover:text-toska-400 transition-colors cursor-pointer">{locale === 'id' ? 'Kebijakan Privasi' : 'Privacy Policy'}</span></li>
               </ul>
             </div>
             <div>
-              <h4 className="font-bold text-lg mb-5 font-[family-name:var(--font-display)]">Hubungi Kami</h4>
+              <h4 className="font-bold text-lg mb-5 font-[family-name:var(--font-display)]">{locale === 'id' ? 'Hubungi Kami' : 'Contact Us'}</h4>
               <ul className="space-y-3 text-ocean-300 text-sm">
                 <li className="flex items-center gap-2">
                   <Phone className="w-4 h-4 text-toska-400" />
