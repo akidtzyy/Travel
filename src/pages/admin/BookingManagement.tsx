@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  CalendarCheck, Search, Filter, Calendar, Mail, Phone,
+  CalendarCheck, Search, Filter,
   User, FileText, Check, X, AlertCircle, Eye, Trash2, Printer,
-  DollarSign, ChevronLeft, ChevronRight, RefreshCw, Palmtree, Car, Landmark
+  DollarSign, ChevronLeft, ChevronRight, RefreshCw, Palmtree, Car,
+  MessageCircle, Download, Plus, Upload, Image as ImageIcon, ExternalLink
 } from 'lucide-react';
 import { useI18n } from '../../lib/I18nContext';
 import supabase from '../../lib/supabase';
@@ -21,8 +22,24 @@ interface Booking {
   total_price: string;
   status: 'pending' | 'confirmed' | 'paid' | 'completed' | 'cancelled';
   payment_status: 'unpaid' | 'paid';
+  ktp_url: string | null;
+  sim_url: string | null;
   created_at: string;
   updated_at: string;
+}
+
+interface AddBookingForm {
+  name: string;
+  email: string;
+  phone: string;
+  booking_type: 'package' | 'car';
+  item_name: string;
+  date: string;
+  duration: string;
+  notes: string;
+  total_price: string;
+  status: 'pending' | 'confirmed' | 'paid' | 'completed' | 'cancelled';
+  payment_status: 'unpaid' | 'paid';
 }
 
 export default function BookingManagement() {
@@ -40,6 +57,29 @@ export default function BookingManagement() {
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
+
+  // Add Booking Modal
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [addLoading, setAddLoading] = useState(false);
+  const [ktpFile, setKtpFile] = useState<File | null>(null);
+  const [simFile, setSimFile] = useState<File | null>(null);
+  const [ktpPreview, setKtpPreview] = useState<string | null>(null);
+  const [simPreview, setSimPreview] = useState<string | null>(null);
+  const ktpInputRef = useRef<HTMLInputElement>(null);
+  const simInputRef = useRef<HTMLInputElement>(null);
+  const [addForm, setAddForm] = useState<AddBookingForm>({
+    name: '',
+    email: '',
+    phone: '',
+    booking_type: 'package',
+    item_name: '',
+    date: '',
+    duration: '',
+    notes: '',
+    total_price: '',
+    status: 'pending',
+    payment_status: 'unpaid',
+  });
 
   // Pagination
   const [page, setPage] = useState(1);
@@ -113,6 +153,67 @@ export default function BookingManagement() {
     setDeleteConfirm(null);
   };
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'ktp' | 'sim') => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const preview = URL.createObjectURL(file);
+    if (type === 'ktp') { setKtpFile(file); setKtpPreview(preview); }
+    else { setSimFile(file); setSimPreview(preview); }
+  };
+
+  const uploadDoc = async (file: File, folder: string): Promise<string | null> => {
+    const ext = file.name.split('.').pop();
+    const path = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    const { error } = await supabase.storage
+      .from('booking-documents')
+      .upload(path, file, { contentType: file.type, upsert: false });
+    if (error) { console.error('Upload error:', error); return null; }
+    const { data } = supabase.storage.from('booking-documents').getPublicUrl(path);
+    return data.publicUrl;
+  };
+
+  const resetAddForm = () => {
+    setAddForm({ name: '', email: '', phone: '', booking_type: 'package', item_name: '', date: '', duration: '', notes: '', total_price: '', status: 'pending', payment_status: 'unpaid' });
+    setKtpFile(null); setSimFile(null); setKtpPreview(null); setSimPreview(null);
+    if (ktpInputRef.current) ktpInputRef.current.value = '';
+    if (simInputRef.current) simInputRef.current.value = '';
+  };
+
+  const handleAddBooking = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAddLoading(true);
+    try {
+      let ktp_url: string | null = null;
+      let sim_url: string | null = null;
+
+      if (ktpFile) {
+        ktp_url = await uploadDoc(ktpFile, 'ktp');
+        if (!ktp_url) { showToast('error', t('docUploadError')); setAddLoading(false); return; }
+      }
+      if (simFile) {
+        sim_url = await uploadDoc(simFile, 'sim');
+        if (!sim_url) { showToast('error', t('docUploadError')); setAddLoading(false); return; }
+      }
+
+      const { error } = await supabase.from('bookings').insert({
+        ...addForm,
+        ktp_url,
+        sim_url,
+      });
+      if (error) throw error;
+
+      showToast('success', t('bookingAdded'));
+      setShowAddModal(false);
+      resetAddForm();
+      loadBookings();
+    } catch (err) {
+      console.error('Error adding booking:', err);
+      showToast('error', t('errorOccurred'));
+    } finally {
+      setAddLoading(false);
+    }
+  };
+
   // Helper labels & badges
   const getStatusBadge = (status: string) => {
     const badges: Record<string, string> = {
@@ -182,6 +283,23 @@ export default function BookingManagement() {
     window.print();
   };
 
+  const exportCSV = () => {
+    const headers = ['ID', 'Nama', 'Email', 'HP', 'Tipe', 'Item', 'Tanggal', 'Durasi', 'Harga', 'Status', 'Status Bayar', 'Dibuat'];
+    const rows = filteredBookings.map(b => [
+      b.id, `"${b.name}"`, b.email, b.phone,
+      b.booking_type, `"${b.item_name}"`, b.date, b.duration,
+      `"${b.total_price}"`, b.status, b.payment_status, b.created_at.slice(0,10)
+    ]);
+    const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `bookings_${new Date().toISOString().slice(0,10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -248,6 +366,29 @@ export default function BookingManagement() {
           <p className="text-slate-500 text-sm mt-1">
             {locale === 'id' ? 'Kelola status pemesanan, pembayaran, dan cetak invoice' : 'Manage booking status, payments, and print invoices'}
           </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={exportCSV}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 text-sm font-medium hover:bg-slate-50 transition-colors"
+          >
+            <Download className="w-4 h-4" />
+            {locale === 'id' ? 'Export CSV' : 'Export CSV'}
+          </button>
+          <button
+            onClick={() => loadBookings()}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 text-sm font-medium hover:bg-slate-50 transition-colors"
+          >
+            <RefreshCw className="w-4 h-4" />
+            {t('refresh')}
+          </button>
+          <button
+            onClick={() => { resetAddForm(); setShowAddModal(true); }}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-toska-500 hover:bg-toska-600 text-white text-sm font-semibold transition-colors shadow-sm shadow-toska-500/25"
+          >
+            <Plus className="w-4 h-4" />
+            {t('addBooking')}
+          </button>
         </div>
       </div>
 
@@ -433,6 +574,17 @@ export default function BookingManagement() {
                         >
                           <Printer className="w-4 h-4" />
                         </button>
+
+                        {/* WhatsApp Quick Contact */}
+                        <a
+                          href={`https://wa.me/${b.phone.replace(/\D/g,'')}?text=${encodeURIComponent(`Halo ${b.name}, kami dari ClickAndGo ingin mengkonfirmasi booking Anda untuk ${b.item_name} pada tanggal ${b.date}. Mohon konfirmasinya. Terima kasih!`)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="Hubungi via WhatsApp"
+                          className="p-1.5 text-slate-500 hover:text-green-600 hover:bg-green-50 rounded-lg transition-all"
+                        >
+                          <MessageCircle className="w-4 h-4" />
+                        </a>
                         
                         {/* Quick Confirm */}
                         {b.status === 'pending' && (
@@ -637,6 +789,58 @@ export default function BookingManagement() {
                     <p className="bg-amber-50/50 text-amber-800 text-xs p-3.5 rounded-xl border border-amber-100 whitespace-pre-wrap leading-relaxed">
                       {selectedBooking.notes}
                     </p>
+                  </div>
+                )}
+
+                {/* KTP & SIM Documents */}
+                {(selectedBooking.ktp_url || selectedBooking.sim_url) && (
+                  <div className="space-y-2.5">
+                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <ImageIcon className="w-3.5 h-3.5 text-slate-500" />
+                      {locale === 'id' ? 'Dokumen Identitas' : 'Identity Documents'}
+                    </h4>
+                    <div className="grid grid-cols-2 gap-3">
+                      {selectedBooking.ktp_url && (
+                        <a
+                          href={selectedBooking.ktp_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="group block"
+                        >
+                          <div className="relative overflow-hidden rounded-xl border border-slate-200 bg-slate-50 hover:border-toska-300 transition-colors">
+                            <img
+                              src={selectedBooking.ktp_url}
+                              alt="KTP"
+                              className="w-full h-20 object-cover group-hover:scale-105 transition-transform duration-200"
+                            />
+                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                              <ExternalLink className="w-4 h-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                            </div>
+                          </div>
+                          <p className="text-[11px] font-semibold text-slate-600 mt-1.5 text-center">{t('ktpPhoto')}</p>
+                        </a>
+                      )}
+                      {selectedBooking.sim_url && (
+                        <a
+                          href={selectedBooking.sim_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="group block"
+                        >
+                          <div className="relative overflow-hidden rounded-xl border border-slate-200 bg-slate-50 hover:border-toska-300 transition-colors">
+                            <img
+                              src={selectedBooking.sim_url}
+                              alt="SIM"
+                              className="w-full h-20 object-cover group-hover:scale-105 transition-transform duration-200"
+                            />
+                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                              <ExternalLink className="w-4 h-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                            </div>
+                          </div>
+                          <p className="text-[11px] font-semibold text-slate-600 mt-1.5 text-center">{t('simPhoto')}</p>
+                        </a>
+                      )}
+                    </div>
                   </div>
                 )}
 
@@ -852,6 +1056,305 @@ export default function BookingManagement() {
                   <p>Matur Suksma. Thank you for choosing ClickAndGo Travel & Rental for your Bali trip!</p>
                 </div>
               </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Add Booking Modal */}
+      <AnimatePresence>
+        {showAddModal && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              className="bg-white rounded-2xl w-full max-w-2xl border border-slate-200 shadow-2xl overflow-hidden flex flex-col my-8"
+            >
+              {/* Modal Header */}
+              <div className="px-6 py-5 bg-gradient-to-r from-slate-900 to-slate-800 text-white flex items-center justify-between">
+                <div>
+                  <h3 className="text-base font-bold font-[family-name:var(--font-display)] flex items-center gap-2">
+                    <Plus className="w-4 h-4 text-toska-400" />
+                    {t('addBooking')}
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">{t('addBookingSubtitle')}</p>
+                </div>
+                <button
+                  onClick={() => setShowAddModal(false)}
+                  className="p-1.5 hover:bg-white/10 rounded-lg text-slate-300 hover:text-white transition-all"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Modal Form */}
+              <form onSubmit={handleAddBooking} className="overflow-y-auto flex-1">
+                <div className="p-6 space-y-6">
+
+                  {/* Customer Info Section */}
+                  <div className="space-y-4">
+                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <User className="w-3.5 h-3.5" />
+                      {locale === 'id' ? 'Informasi Pelanggan' : 'Customer Info'}
+                    </h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="sm:col-span-2">
+                        <label className="text-xs font-medium text-slate-600 block mb-1.5">{t('fullName')} *</label>
+                        <input
+                          type="text"
+                          required
+                          value={addForm.name}
+                          onChange={e => setAddForm(p => ({ ...p, name: e.target.value }))}
+                          placeholder={locale === 'id' ? 'Nama lengkap pelanggan' : 'Full customer name'}
+                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-toska-500 text-sm text-slate-800 placeholder-slate-400"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-slate-600 block mb-1.5">Email *</label>
+                        <input
+                          type="email"
+                          required
+                          value={addForm.email}
+                          onChange={e => setAddForm(p => ({ ...p, email: e.target.value }))}
+                          placeholder="email@example.com"
+                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-toska-500 text-sm text-slate-800 placeholder-slate-400"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-slate-600 block mb-1.5">{locale === 'id' ? 'No. WhatsApp' : 'Phone / WhatsApp'} *</label>
+                        <input
+                          type="tel"
+                          required
+                          value={addForm.phone}
+                          onChange={e => setAddForm(p => ({ ...p, phone: e.target.value }))}
+                          placeholder="08xxxxxxxxxx"
+                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-toska-500 text-sm text-slate-800 placeholder-slate-400"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Booking Details Section */}
+                  <div className="space-y-4">
+                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <CalendarCheck className="w-3.5 h-3.5" />
+                      {locale === 'id' ? 'Detail Pesanan' : 'Booking Details'}
+                    </h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-xs font-medium text-slate-600 block mb-1.5">{t('bookingType')} *</label>
+                        <select
+                          value={addForm.booking_type}
+                          onChange={e => setAddForm(p => ({ ...p, booking_type: e.target.value as 'package' | 'car' }))}
+                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-toska-500 text-sm text-slate-700 bg-white"
+                        >
+                          <option value="package">{t('tourPackage')}</option>
+                          <option value="car">{t('carRental')}</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-slate-600 block mb-1.5">{t('date')} *</label>
+                        <input
+                          type="date"
+                          required
+                          value={addForm.date}
+                          onChange={e => setAddForm(p => ({ ...p, date: e.target.value }))}
+                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-toska-500 text-sm text-slate-700"
+                        />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label className="text-xs font-medium text-slate-600 block mb-1.5">{locale === 'id' ? 'Nama Item' : 'Item Name'} *</label>
+                        <input
+                          type="text"
+                          required
+                          value={addForm.item_name}
+                          onChange={e => setAddForm(p => ({ ...p, item_name: e.target.value }))}
+                          placeholder={t('itemNamePlaceholder')}
+                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-toska-500 text-sm text-slate-800 placeholder-slate-400"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-slate-600 block mb-1.5">{locale === 'id' ? 'Jumlah / Durasi' : 'Duration / Pax'} *</label>
+                        <input
+                          type="text"
+                          required
+                          value={addForm.duration}
+                          onChange={e => setAddForm(p => ({ ...p, duration: e.target.value }))}
+                          placeholder={t('durationPlaceholder')}
+                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-toska-500 text-sm text-slate-800 placeholder-slate-400"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-slate-600 block mb-1.5">{t('price')} *</label>
+                        <input
+                          type="text"
+                          required
+                          value={addForm.total_price}
+                          onChange={e => setAddForm(p => ({ ...p, total_price: e.target.value }))}
+                          placeholder={t('totalPricePlaceholder')}
+                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-toska-500 text-sm text-slate-800 placeholder-slate-400"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-slate-600 block mb-1.5">{t('status')}</label>
+                        <select
+                          value={addForm.status}
+                          onChange={e => setAddForm(p => ({ ...p, status: e.target.value as any }))}
+                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-toska-500 text-sm text-slate-700 bg-white"
+                        >
+                          <option value="pending">{t('pending')}</option>
+                          <option value="confirmed">{t('confirmed')}</option>
+                          <option value="paid">{t('paid')}</option>
+                          <option value="completed">{t('completed')}</option>
+                          <option value="cancelled">{t('cancelled')}</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-slate-600 block mb-1.5">{t('paymentStatus')}</label>
+                        <select
+                          value={addForm.payment_status}
+                          onChange={e => setAddForm(p => ({ ...p, payment_status: e.target.value as any }))}
+                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-toska-500 text-sm text-slate-700 bg-white"
+                        >
+                          <option value="unpaid">{t('unpaid')}</option>
+                          <option value="paid">{t('paid')}</option>
+                        </select>
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label className="text-xs font-medium text-slate-600 block mb-1.5">{t('notes')}</label>
+                        <textarea
+                          rows={3}
+                          value={addForm.notes}
+                          onChange={e => setAddForm(p => ({ ...p, notes: e.target.value }))}
+                          placeholder={locale === 'id' ? 'Catatan tambahan (opsional)' : 'Additional notes (optional)'}
+                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-toska-500 text-sm text-slate-800 placeholder-slate-400 resize-none"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Document Upload Section */}
+                  <div className="space-y-4">
+                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <Upload className="w-3.5 h-3.5" />
+                      {locale === 'id' ? 'Upload Dokumen Identitas' : 'Identity Document Upload'}
+                    </h4>
+
+                    {/* KTP Upload */}
+                    <div>
+                      <label className="text-xs font-medium text-slate-600 block mb-1.5">
+                        {t('ktpPhoto')}
+                        <span className="ml-1 text-slate-400 font-normal">({locale === 'id' ? 'Wajib' : 'Required'})</span>
+                      </label>
+                      <p className="text-[11px] text-slate-400 mb-2">{t('ktpUploadHint')}</p>
+                      <div
+                        onClick={() => ktpInputRef.current?.click()}
+                        className="relative border-2 border-dashed border-slate-200 rounded-xl p-4 cursor-pointer hover:border-toska-400 hover:bg-toska-50/30 transition-all group"
+                      >
+                        <input
+                          ref={ktpInputRef}
+                          type="file"
+                          accept="image/jpeg,image/jpg,image/png,image/webp"
+                          onChange={e => handleFileChange(e, 'ktp')}
+                          className="hidden"
+                        />
+                        {ktpPreview ? (
+                          <div className="flex items-center gap-3">
+                            <img src={ktpPreview} alt="KTP Preview" className="w-20 h-14 object-cover rounded-lg border border-slate-200" />
+                            <div>
+                              <p className="text-sm font-semibold text-slate-800">{ktpFile?.name}</p>
+                              <p className="text-xs text-slate-500 mt-0.5">{ktpFile ? (ktpFile.size / 1024).toFixed(0) + ' KB' : ''}</p>
+                              <p className="text-[11px] text-toska-500 mt-1">{locale === 'id' ? 'Klik untuk ganti' : 'Click to change'}</p>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col items-center gap-2 py-2">
+                            <div className="w-10 h-10 bg-slate-100 group-hover:bg-toska-100 rounded-xl flex items-center justify-center transition-colors">
+                              <ImageIcon className="w-5 h-5 text-slate-400 group-hover:text-toska-500 transition-colors" />
+                            </div>
+                            <p className="text-sm text-slate-500 group-hover:text-toska-600 transition-colors">
+                              {locale === 'id' ? 'Klik untuk upload foto KTP' : 'Click to upload KTP photo'}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* SIM Upload */}
+                    <div>
+                      <label className="text-xs font-medium text-slate-600 block mb-1.5">
+                        {t('simPhoto')}
+                        <span className="ml-1 text-slate-400 font-normal">
+                          {addForm.booking_type === 'car'
+                            ? `(${locale === 'id' ? 'Wajib untuk sewa mobil' : 'Required for car rental'})`
+                            : `(${locale === 'id' ? 'Opsional' : 'Optional'})`}
+                        </span>
+                      </label>
+                      <p className="text-[11px] text-slate-400 mb-2">{t('simUploadHint')}</p>
+                      <div
+                        onClick={() => simInputRef.current?.click()}
+                        className={`relative border-2 border-dashed rounded-xl p-4 cursor-pointer hover:border-toska-400 hover:bg-toska-50/30 transition-all group ${
+                          addForm.booking_type === 'car' ? 'border-amber-300 bg-amber-50/20' : 'border-slate-200'
+                        }`}
+                      >
+                        <input
+                          ref={simInputRef}
+                          type="file"
+                          accept="image/jpeg,image/jpg,image/png,image/webp"
+                          onChange={e => handleFileChange(e, 'sim')}
+                          className="hidden"
+                        />
+                        {simPreview ? (
+                          <div className="flex items-center gap-3">
+                            <img src={simPreview} alt="SIM Preview" className="w-20 h-14 object-cover rounded-lg border border-slate-200" />
+                            <div>
+                              <p className="text-sm font-semibold text-slate-800">{simFile?.name}</p>
+                              <p className="text-xs text-slate-500 mt-0.5">{simFile ? (simFile.size / 1024).toFixed(0) + ' KB' : ''}</p>
+                              <p className="text-[11px] text-toska-500 mt-1">{locale === 'id' ? 'Klik untuk ganti' : 'Click to change'}</p>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col items-center gap-2 py-2">
+                            <div className="w-10 h-10 bg-slate-100 group-hover:bg-toska-100 rounded-xl flex items-center justify-center transition-colors">
+                              <ImageIcon className="w-5 h-5 text-slate-400 group-hover:text-toska-500 transition-colors" />
+                            </div>
+                            <p className="text-sm text-slate-500 group-hover:text-toska-600 transition-colors">
+                              {locale === 'id' ? 'Klik untuk upload foto SIM' : 'Click to upload SIM/License photo'}
+                            </p>
+                            {addForm.booking_type === 'car' && (
+                              <p className="text-[11px] text-amber-600 font-medium">{locale === 'id' ? '⚠ Wajib untuk sewa mobil' : '⚠ Required for car rental'}</p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Footer Actions */}
+                <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddModal(false)}
+                    disabled={addLoading}
+                    className="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-100 transition-colors disabled:opacity-50"
+                  >
+                    {t('cancelAction')}
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={addLoading}
+                    className="px-5 py-2.5 rounded-xl bg-toska-500 hover:bg-toska-600 text-white text-sm font-semibold transition-colors flex items-center gap-2 disabled:opacity-60 shadow-sm shadow-toska-500/25"
+                  >
+                    {addLoading ? (
+                      <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> {t('uploadingDoc')}...</>
+                    ) : (
+                      <><Plus className="w-4 h-4" /> {t('addBooking')}</>
+                    )}
+                  </button>
+                </div>
+              </form>
             </motion.div>
           </div>
         )}
