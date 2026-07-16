@@ -16,6 +16,17 @@ CREATE TABLE IF NOT EXISTS public.profiles (
 -- Enable Row Level Security
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
+-- Helper function to get user role without recursion
+CREATE OR REPLACE FUNCTION public.get_user_role(user_id UUID)
+RETURNS TEXT AS $$
+BEGIN
+  RETURN (
+    SELECT role FROM public.profiles
+    WHERE id = user_id
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 -- RLS Policies
 -- 1. Allow users to view their own profile, and admins to view all profiles
 DROP POLICY IF EXISTS "Users can view own profile or admins view all" ON public.profiles;
@@ -25,7 +36,7 @@ CREATE POLICY "Users can view own profile or admins view all" ON public.profiles
   USING (
     auth.uid() = id 
     OR 
-    (SELECT role FROM public.profiles WHERE id = auth.uid()) = 'admin'
+    public.get_user_role(auth.uid()) = 'admin'
   );
 
 -- 2. Allow users to update their own full_name, and admins to update anything
@@ -36,16 +47,16 @@ CREATE POLICY "Users can update own profile or admins update all" ON public.prof
   USING (
     auth.uid() = id
     OR
-    (SELECT role FROM public.profiles WHERE id = auth.uid()) = 'admin'
+    public.get_user_role(auth.uid()) = 'admin'
   )
   WITH CHECK (
     (
       auth.uid() = id 
       AND 
-      role = (SELECT role FROM public.profiles WHERE id = auth.uid())
+      role = public.get_user_role(auth.uid())
     )
     OR
-    (SELECT role FROM public.profiles WHERE id = auth.uid()) = 'admin'
+    public.get_user_role(auth.uid()) = 'admin'
   );
 
 -- Trigger function to handle new user registration
