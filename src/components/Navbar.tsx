@@ -9,6 +9,7 @@ export default function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [mobileAboutOpen, setMobileAboutOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
   const { user, isLoggedIn, isAdmin, signOut } = useAuth();
@@ -24,6 +25,7 @@ export default function Navbar() {
   useEffect(() => {
     setIsOpen(false);
     setUserMenuOpen(false);
+    setMobileAboutOpen(false);
   }, [location]);
 
   // Close user menu on outside click
@@ -56,10 +58,8 @@ export default function Navbar() {
   const navLinks = [
     { href: '/#beranda', label: t('home') },
     { href: '/#paket', label: t('tourPackages') },
-    { href: '/sewa-mobil', label: t('carRental') },
+    { href: '/sewa-mobil', label: locale === 'id' ? 'Mobil' : 'Cars' },
     { href: '/#destinasi', label: t('destinations') },
-    { href: '/#testimoni', label: t('testimonials') },
-    { href: '/#faq', label: t('faq') },
   ];
 
   return (
@@ -100,6 +100,45 @@ export default function Navbar() {
                 </Link>
               )
             ))}
+
+            {/* Dropdown Tentang Kami */}
+            <div className="relative group py-2">
+              <button
+                className={`flex items-center gap-1 text-sm font-medium transition-colors hover:text-toska-400 focus:outline-none ${
+                  scrolled ? 'text-ocean-800' : 'text-white/90'
+                }`}
+              >
+                <span>{locale === 'id' ? 'Tentang Kami' : 'About Us'}</span>
+                <ChevronDown className="w-4 h-4 transition-transform group-hover:rotate-180 duration-300" />
+              </button>
+              
+              <div className="absolute left-0 mt-2 w-56 bg-white border border-ocean-100 rounded-2xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 py-2.5 z-50 transform origin-top -translate-y-1 group-hover:translate-y-0">
+                <a
+                  href="/#testimoni"
+                  className="block px-5 py-2.5 text-sm text-ocean-800 hover:bg-toska-50 hover:text-toska-600 transition-colors font-medium"
+                >
+                  {t('testimonials')}
+                </a>
+                <a
+                  href="/#faq"
+                  className="block px-5 py-2.5 text-sm text-ocean-800 hover:bg-toska-50 hover:text-toska-600 transition-colors font-medium"
+                >
+                  {t('faq')}
+                </a>
+                <a
+                  href="/#syarat-ketentuan"
+                  className="block px-5 py-2.5 text-sm text-ocean-800 hover:bg-toska-50 hover:text-toska-600 transition-colors font-medium"
+                >
+                  {t('termsTitle')}
+                </a>
+                <a
+                  href="/#kebijakan-privasi"
+                  className="block px-5 py-2.5 text-sm text-ocean-800 hover:bg-toska-50 hover:text-toska-600 transition-colors font-medium"
+                >
+                  {t('privacyTitle')}
+                </a>
+              </div>
+            </div>
           </div>
 
           {/* Action Buttons */}
@@ -236,6 +275,50 @@ export default function Navbar() {
                   </Link>
                 )
               ))}
+
+              {/* Tentang Kami Mobile Accordion */}
+              <div className="space-y-1">
+                <button
+                  onClick={() => setMobileAboutOpen(!mobileAboutOpen)}
+                  className="flex items-center justify-between w-full px-4 py-3 text-ocean-800 hover:bg-ocean-50 rounded-lg font-medium text-left focus:outline-none"
+                >
+                  <span>{locale === 'id' ? 'Tentang Kami' : 'About Us'}</span>
+                  <ChevronDown className={`w-4 h-4 transition-transform duration-300 ${mobileAboutOpen ? 'rotate-180' : ''}`} />
+                </button>
+                
+                {mobileAboutOpen && (
+                  <div className="pl-4 space-y-1 bg-ocean-50/50 rounded-lg py-1">
+                    <a
+                      href="/#testimoni"
+                      onClick={() => setIsOpen(false)}
+                      className="block px-4 py-2.5 text-sm text-ocean-700 hover:bg-ocean-50 rounded-lg font-medium"
+                    >
+                      {t('testimonials')}
+                    </a>
+                    <a
+                      href="/#faq"
+                      onClick={() => setIsOpen(false)}
+                      className="block px-4 py-2.5 text-sm text-ocean-700 hover:bg-ocean-50 rounded-lg font-medium"
+                    >
+                      {t('faq')}
+                    </a>
+                    <a
+                      href="/#syarat-ketentuan"
+                      onClick={() => setIsOpen(false)}
+                      className="block px-4 py-2.5 text-sm text-ocean-700 hover:bg-ocean-50 rounded-lg font-medium"
+                    >
+                      {t('termsTitle')}
+                    </a>
+                    <a
+                      href="/#kebijakan-privasi"
+                      onClick={() => setIsOpen(false)}
+                      className="block px-4 py-2.5 text-sm text-ocean-700 hover:bg-ocean-50 rounded-lg font-medium"
+                    >
+                      {t('privacyTitle')}
+                    </a>
+                  </div>
+                )}
+              </div>
               <a
                 href="/#booking"
                 className="block text-center bg-toska-500 text-white px-6 py-3 rounded-full font-semibold mt-4 text-sm"
