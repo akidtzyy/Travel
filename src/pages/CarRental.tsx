@@ -2,6 +2,8 @@ import { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Car, Users, Clock, CheckCircle, Send, ArrowLeft, Fuel, Settings, AlertTriangle } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import Lenis from 'lenis';
+import Footer from '../components/Footer';
 import supabase from '../lib/supabase';
 import { useAuth } from '../lib/AuthContext';
 import { useI18n } from '../lib/I18nContext';
@@ -32,6 +34,28 @@ export default function CarRentalPage() {
   const [bookingLoading, setBookingLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [selectedCarId, setSelectedCarId] = useState<number | ''>('');
+
+  // Lenis smooth scrolling
+  useEffect(() => {
+    const lenis = new Lenis({
+      duration: 1.2,
+      easing: (t: number) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+      orientation: 'vertical',
+      smoothWheel: true,
+    });
+
+    let rafId: number;
+    function raf(time: number) {
+      lenis.raf(time);
+      rafId = requestAnimationFrame(raf);
+    }
+    rafId = requestAnimationFrame(raf);
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      lenis.destroy();
+    };
+  }, []);
 
   useEffect(() => {
     const loadCars = async () => {
@@ -562,11 +586,7 @@ export default function CarRentalPage() {
       )}
 
       {/* Footer */}
-      <footer className="bg-ocean-900 text-white py-8">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <p className="text-ocean-400 text-sm">© 2026 ClickAndGo. All rights reserved.</p>
-        </div>
-      </footer>
+      <Footer />
     </div>
   );
 }
