@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { MapPin, Clock, Users, Star, ChevronDown, ChevronUp, Phone, Mail, Send, CheckCircle, Calendar, Car, Sparkles, Shield, Heart, LogIn, UserCheck } from 'lucide-react';
+import { MapPin, Clock, Users, Star, ChevronDown, ChevronUp, Phone, Mail, Send, CheckCircle, Calendar, Car, Sparkles, Shield, Heart, LogIn, UserCheck, FileText, Lock } from 'lucide-react';
+import Lenis from 'lenis';
 import Hero from '../components/Hero';
 import PackageCard from '../components/PackageCard';
 import supabase from '../lib/supabase';
@@ -102,6 +103,28 @@ export default function Home() {
   });
   const [bookingSuccess, setBookingSuccess] = useState(false);
   const [bookingLoading, setBookingLoading] = useState(false);
+
+  // Lenis smooth scrolling
+  useEffect(() => {
+    const lenis = new Lenis({
+      duration: 1.2,
+      easing: (t: number) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+      orientation: 'vertical',
+      smoothWheel: true,
+    });
+
+    let rafId: number;
+    function raf(time: number) {
+      lenis.raf(time);
+      rafId = requestAnimationFrame(raf);
+    }
+    rafId = requestAnimationFrame(raf);
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      lenis.destroy();
+    };
+  }, []);
 
   // Auto-fill user data when logged in
   useEffect(() => {
@@ -328,11 +351,15 @@ export default function Home() {
       <Hero />
 
       {/* Why Choose Us */}
-      <section className="py-28 bg-ocean-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <section className="py-28 relative overflow-hidden" style={{background: 'linear-gradient(135deg, #f0f9ff 0%, #fefcf3 50%, #f0fdfa 100%)'}}>
+        {/* Background decoration */}
+        <div className="absolute top-0 right-0 w-96 h-96 bg-toska-100/50 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3 pointer-events-none" />
+        <div className="absolute bottom-0 left-0 w-72 h-72 bg-ocean-100/50 rounded-full blur-3xl translate-y-1/2 -translate-x-1/3 pointer-events-none" />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
           <motion.div {...fadeInUp} className="text-center mb-16">
-            <h2 className="text-3xl sm:text-4xl font-bold text-ocean-900 font-[family-name:var(--font-display)] mb-6">
-              {t('whyChooseUs')}
+            <span className="inline-block text-toska-600 font-semibold text-sm uppercase tracking-widest mb-3 bg-toska-50 border border-toska-200 px-4 py-1.5 rounded-full">{t('whyChooseUs')}</span>
+            <h2 className="text-3xl sm:text-4xl font-bold text-ocean-900 font-[family-name:var(--font-display)] mb-5">
+              {locale === 'id' ? 'Kenapa Pilih Kami?' : 'Why Choose Us?'}
             </h2>
             <p className="text-ocean-600 max-w-2xl mx-auto leading-relaxed">
               {locale === 'id' 
@@ -340,26 +367,26 @@ export default function Home() {
                 : 'We are committed to providing the best travel experience with professional service and affordable prices'}
             </p>
           </motion.div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {[
-              { icon: Shield, title: locale === 'id' ? 'Terpercaya' : 'Trusted', desc: locale === 'id' ? 'Berpengalaman lebih dari 5 tahun melayani wisatawan domestik & mancanegara' : 'Over 5 years of experience serving domestic & international tourists' },
-              { icon: Sparkles, title: locale === 'id' ? 'Kualitas Premium' : 'Premium Quality', desc: locale === 'id' ? 'Armada terawat, driver profesional, dan itinerary yang dirancang sempurna' : 'Well-maintained fleet, professional drivers, and perfectly designed itineraries' },
-              { icon: Heart, title: locale === 'id' ? 'Harga Terbaik' : 'Best Prices', desc: locale === 'id' ? 'Harga kompetitif tanpa biaya tersembunyi, transparan dan jujur' : 'Competitive rates with no hidden fees, transparent and honest' },
-              { icon: Phone, title: t('support247'), desc: locale === 'id' ? 'Tim kami siap membantu Anda kapan saja selama perjalanan di Bali' : 'Our team is ready to assist you anytime during your trip in Bali' },
+              { icon: Shield, title: locale === 'id' ? 'Terpercaya' : 'Trusted', desc: locale === 'id' ? 'Berpengalaman lebih dari 5 tahun melayani wisatawan domestik & mancanegara' : 'Over 5 years of experience serving domestic & international tourists', gradient: 'from-blue-500 to-ocean-500' },
+              { icon: Sparkles, title: locale === 'id' ? 'Kualitas Premium' : 'Premium Quality', desc: locale === 'id' ? 'Armada terawat, driver profesional, dan itinerary yang dirancang sempurna' : 'Well-maintained fleet, professional drivers, and perfectly designed itineraries', gradient: 'from-toska-400 to-toska-600' },
+              { icon: Heart, title: locale === 'id' ? 'Harga Terbaik' : 'Best Prices', desc: locale === 'id' ? 'Harga kompetitif tanpa biaya tersembunyi, transparan dan jujur' : 'Competitive rates with no hidden fees, transparent and honest', gradient: 'from-rose-400 to-pink-600' },
+              { icon: Phone, title: t('support247'), desc: locale === 'id' ? 'Tim kami siap membantu Anda kapan saja selama perjalanan di Bali' : 'Our team is ready to assist you anytime during your trip in Bali', gradient: 'from-amber-400 to-orange-500' },
             ].map((item, i) => (
               <motion.div
                 key={i}
-                initial={{ opacity: 0, y: 30 }}
+                initial={{ opacity: 0, y: 40 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
-                transition={{ duration: 0.6, delay: i * 0.1 }}
-                className="bg-white rounded-2xl p-8 shadow-sm hover:shadow-xl transition-all duration-300 border border-ocean-100 group"
+                transition={{ duration: 0.6, delay: i * 0.12 }}
+                className="bg-white rounded-2xl p-7 shadow-sm hover:shadow-2xl hover:-translate-y-2 transition-all duration-500 border border-white/80 group cursor-default"
               >
-                <div className="w-14 h-14 bg-toska-50 rounded-xl flex items-center justify-center mb-5 group-hover:bg-toska-500 transition-colors">
-                  <item.icon className="w-7 h-7 text-toska-500 group-hover:text-white transition-colors" />
+                <div className={`w-14 h-14 bg-gradient-to-br ${item.gradient} rounded-2xl flex items-center justify-center mb-6 shadow-lg group-hover:scale-110 transition-transform duration-300`}>
+                  <item.icon className="w-7 h-7 text-white" />
                 </div>
-                <h3 className="text-lg font-bold text-ocean-900 mb-2">{item.title}</h3>
-                <p className="text-ocean-600 text-sm leading-relaxed">{item.desc}</p>
+                <h3 className="text-lg font-bold text-ocean-900 mb-2.5">{item.title}</h3>
+                <p className="text-ocean-500 text-sm leading-relaxed">{item.desc}</p>
               </motion.div>
             ))}
           </div>
@@ -482,30 +509,51 @@ export default function Home() {
       </section>
 
       {/* Car Rental CTA */}
-      <section className="py-24 bg-ocean-900 relative overflow-hidden">
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute top-0 left-0 w-96 h-96 bg-toska-500 rounded-full -translate-x-1/2 -translate-y-1/2 blur-3xl" />
-          <div className="absolute bottom-0 right-0 w-96 h-96 bg-ocean-400 rounded-full translate-x-1/2 translate-y-1/2 blur-3xl" />
-        </div>
+      <section className="py-24 relative overflow-hidden">
+        {/* Dark gradient background */}
+        <div className="absolute inset-0 bg-gradient-to-br from-ocean-900 via-ocean-800 to-[#0a3d5c]" />
+        {/* Grid pattern overlay */}
+        <div className="absolute inset-0 opacity-5" style={{backgroundImage: 'linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)', backgroundSize: '40px 40px'}} />
+        {/* Glow orbs */}
+        <div className="absolute top-0 left-0 w-80 h-80 bg-toska-500/20 rounded-full -translate-x-1/2 -translate-y-1/2 blur-3xl" />
+        <div className="absolute bottom-0 right-0 w-80 h-80 bg-ocean-400/15 rounded-full translate-x-1/2 translate-y-1/2 blur-3xl" />
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           <div className="flex flex-col lg:flex-row items-center justify-between gap-10">
             <div>
-              <h2 className="text-3xl sm:text-4xl font-bold text-white font-[family-name:var(--font-display)] mb-5">
-                {locale === 'id' ? 'Butuh Transportasi di Bali?' : 'Need Transportation in Bali?'}
+              <div className="inline-flex items-center gap-2 bg-toska-500/20 border border-toska-500/30 px-4 py-1.5 rounded-full mb-6">
+                <Car className="w-4 h-4 text-toska-300" />
+                <span className="text-toska-300 text-sm font-medium">{locale === 'id' ? 'Sewa Mobil Bali' : 'Bali Car Rental'}</span>
+              </div>
+              <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white font-[family-name:var(--font-display)] mb-5 leading-tight">
+                {locale === 'id' ? 'Butuh Transportasi' : 'Need Transportation'}
+                <br />
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-toska-300 to-toska-500">
+                  {locale === 'id' ? 'di Bali?' : 'in Bali?'}
+                </span>
               </h2>
-              <p className="text-ocean-200 text-lg max-w-xl leading-relaxed">
+              <p className="text-ocean-200/80 text-lg max-w-xl leading-relaxed">
                 {locale === 'id'
                   ? 'Sewa mobil dengan atau tanpa driver. Armada lengkap dari city car hingga bus besar untuk rombongan.'
                   : 'Rent a car with or without driver. Complete fleet from city cars to large buses for groups.'}
               </p>
             </div>
-            <Link
-              to="/sewa-mobil"
-              className="flex items-center gap-3 bg-toska-500 hover:bg-toska-600 text-white px-8 py-4 rounded-full text-lg font-semibold transition-all hover:shadow-xl hover:shadow-toska-500/30 shrink-0"
-            >
-              <Car className="w-5 h-5" />
-              {locale === 'id' ? 'Lihat Armada' : 'View Fleet'}
-            </Link>
+            <div className="flex flex-col sm:flex-row gap-4 shrink-0">
+              <Link
+                to="/sewa-mobil"
+                className="flex items-center gap-3 bg-toska-500 hover:bg-toska-400 text-white px-8 py-4 rounded-full text-base font-semibold transition-all hover:shadow-2xl hover:shadow-toska-500/40 hover:-translate-y-0.5"
+              >
+                <Car className="w-5 h-5" />
+                {locale === 'id' ? 'Lihat Armada' : 'View Fleet'}
+              </Link>
+              <a
+                href="https://wa.me/6281243499265"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-3 bg-white/10 hover:bg-white/20 backdrop-blur-sm border border-white/20 text-white px-8 py-4 rounded-full text-base font-semibold transition-all hover:-translate-y-0.5"
+              >
+                {locale === 'id' ? 'Hubungi Kami' : 'Contact Us'}
+              </a>
+            </div>
           </div>
         </div>
       </section>
@@ -988,6 +1036,167 @@ export default function Home() {
         </div>
       </section>
 
+      {/* Syarat & Kebijakan Section */}
+      <section className="py-24 relative overflow-hidden" style={{ background: 'linear-gradient(135deg, #fefcf3 0%, #f0fdfa 50%, #f0f9ff 100%)' }}>
+        {/* Background decoration */}
+        <div className="absolute top-1/2 left-0 w-96 h-96 bg-ocean-100/40 rounded-full blur-3xl -translate-y-1/2 -translate-x-1/2 pointer-events-none" />
+        <div className="absolute top-1/3 right-0 w-96 h-96 bg-toska-100/40 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
+
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.6 }}
+            className="text-center mb-16"
+          >
+            <span className="inline-block text-toska-600 font-semibold text-sm uppercase tracking-widest mb-3 bg-toska-50 border border-toska-200 px-4 py-1.5 rounded-full">
+              {locale === 'id' ? 'Legalitas & Aturan' : 'Legal & Rules'}
+            </span>
+            <h2 className="text-3xl sm:text-4xl font-bold text-ocean-900 font-[family-name:var(--font-display)] mb-4">
+              {locale === 'id' ? 'Syarat, Ketentuan & Kebijakan' : 'Terms, Conditions & Policies'}
+            </h2>
+            <p className="text-ocean-600 max-w-2xl mx-auto leading-relaxed text-sm sm:text-base">
+              {locale === 'id'
+                ? 'Informasi penting mengenai aturan penggunaan layanan kami dan bagaimana kami melindungi data pribadi Anda.'
+                : 'Important information regarding the rules of using our services and how we protect your personal data.'}
+            </p>
+          </motion.div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+            {/* Card 1: Syarat & Ketentuan */}
+            <motion.div
+              id="syarat-ketentuan"
+              initial={{ opacity: 0, x: -40 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.7 }}
+              className="scroll-mt-28 bg-white rounded-3xl p-8 sm:p-10 shadow-sm hover:shadow-xl border border-ocean-100/80 hover:-translate-y-1 transition-all duration-300 group"
+            >
+              <div className="flex items-center gap-4 mb-8">
+                <div className="w-12 h-12 bg-toska-50 rounded-2xl flex items-center justify-center text-toska-500 group-hover:scale-110 transition-transform duration-300">
+                  <FileText className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-2xl font-bold text-ocean-900 font-[family-name:var(--font-display)]">
+                    {t('termsTitle')}
+                  </h3>
+                  <p className="text-xs text-ocean-400 mt-0.5">{t('termsSubtitle')}</p>
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                {/* Section A: Pembayaran */}
+                <div>
+                  <h4 className="font-semibold text-ocean-900 flex items-center gap-2 mb-3 text-base">
+                    <span className="w-1.5 h-1.5 rounded-full bg-toska-500" />
+                    {t('termsPaymentTitle')}
+                  </h4>
+                  <ul className="space-y-2.5 pl-3.5 text-sm text-ocean-600 leading-relaxed list-disc marker:text-toska-400">
+                    <li>{t('termsPayment1')}</li>
+                    <li>{t('termsPayment2')}</li>
+                  </ul>
+                </div>
+
+                {/* Section B: Pembatalan */}
+                <div>
+                  <h4 className="font-semibold text-ocean-900 flex items-center gap-2 mb-3 text-base">
+                    <span className="w-1.5 h-1.5 rounded-full bg-toska-500" />
+                    {t('termsCancelTitle')}
+                  </h4>
+                  <ul className="space-y-2.5 pl-3.5 text-sm text-ocean-600 leading-relaxed list-disc marker:text-toska-400">
+                    <li>{t('termsCancel1')}</li>
+                    <li>{t('termsCancel2')}</li>
+                    <li>{t('termsCancel3')}</li>
+                  </ul>
+                </div>
+
+                {/* Section C: Persyaratan Sewa */}
+                <div>
+                  <h4 className="font-semibold text-ocean-900 flex items-center gap-2 mb-3 text-base">
+                    <span className="w-1.5 h-1.5 rounded-full bg-toska-500" />
+                    {t('termsRentalTitle')}
+                  </h4>
+                  <ul className="space-y-2.5 pl-3.5 text-sm text-ocean-600 leading-relaxed list-disc marker:text-toska-400">
+                    <li>{t('termsRental1')}</li>
+                    <li>{t('termsRental2')}</li>
+                    <li>{t('termsRental3')}</li>
+                  </ul>
+                </div>
+              </div>
+            </motion.div>
+
+            {/* Card 2: Kebijakan Privasi */}
+            <motion.div
+              id="kebijakan-privasi"
+              initial={{ opacity: 0, x: 40 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.7 }}
+              className="scroll-mt-28 bg-white rounded-3xl p-8 sm:p-10 shadow-sm hover:shadow-xl border border-ocean-100/80 hover:-translate-y-1 transition-all duration-300 group"
+            >
+              <div className="flex items-center gap-4 mb-8">
+                <div className="w-12 h-12 bg-ocean-50 rounded-2xl flex items-center justify-center text-ocean-600 group-hover:scale-110 transition-transform duration-300">
+                  <Lock className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-2xl font-bold text-ocean-900 font-[family-name:var(--font-display)]">
+                    {t('privacyTitle')}
+                  </h3>
+                  <p className="text-xs text-ocean-400 mt-0.5">{t('privacySubtitle')}</p>
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                {/* Section A: Pengumpulan Data */}
+                <div>
+                  <h4 className="font-semibold text-ocean-900 flex items-center gap-2 mb-3 text-base">
+                    <span className="w-1.5 h-1.5 rounded-full bg-ocean-500" />
+                    {t('privacyCollectTitle')}
+                  </h4>
+                  <ul className="space-y-2.5 pl-3.5 text-sm text-ocean-600 leading-relaxed list-disc marker:text-ocean-400">
+                    <li>{t('privacyCollect1')}</li>
+                  </ul>
+                </div>
+
+                {/* Section B: Penggunaan Data */}
+                <div>
+                  <h4 className="font-semibold text-ocean-900 flex items-center gap-2 mb-3 text-base">
+                    <span className="w-1.5 h-1.5 rounded-full bg-ocean-500" />
+                    {t('privacyUsageTitle')}
+                  </h4>
+                  <ul className="space-y-2.5 pl-3.5 text-sm text-ocean-600 leading-relaxed list-disc marker:text-ocean-400">
+                    <li>{t('privacyUsage1')}</li>
+                  </ul>
+                </div>
+
+                {/* Section C: Keamanan Data */}
+                <div>
+                  <h4 className="font-semibold text-ocean-900 flex items-center gap-2 mb-3 text-base">
+                    <span className="w-1.5 h-1.5 rounded-full bg-ocean-500" />
+                    {t('privacySecurityTitle')}
+                  </h4>
+                  <ul className="space-y-2.5 pl-3.5 text-sm text-ocean-600 leading-relaxed list-disc marker:text-ocean-400">
+                    <li>{t('privacySecurity1')}</li>
+                  </ul>
+                </div>
+
+                {/* Section D: Pihak Ketiga */}
+                <div>
+                  <h4 className="font-semibold text-ocean-900 flex items-center gap-2 mb-3 text-base">
+                    <span className="w-1.5 h-1.5 rounded-full bg-ocean-500" />
+                    {t('privacyShareTitle')}
+                  </h4>
+                  <ul className="space-y-2.5 pl-3.5 text-sm text-ocean-600 leading-relaxed list-disc marker:text-ocean-400">
+                    <li>{t('privacyShare1')}</li>
+                  </ul>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        </div>
+      </section>
+
       {/* Footer */}
       <footer className="bg-ocean-900 text-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
@@ -1011,7 +1220,7 @@ export default function Home() {
                   aria-label="Instagram"
                 >
                   <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+                    <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0 3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
                   </svg>
                 </a>
                 <a
@@ -1052,8 +1261,8 @@ export default function Home() {
               <ul className="space-y-2.5 text-ocean-300 text-sm">
                 <li><a href="#faq" className="hover:text-toska-400 transition-colors">{t('faq')}</a></li>
                 <li><a href="#testimoni" className="hover:text-toska-400 transition-colors">{t('testimonials')}</a></li>
-                <li><span className="hover:text-toska-400 transition-colors cursor-pointer">{locale === 'id' ? 'Syarat & Ketentuan' : 'Terms & Conditions'}</span></li>
-                <li><span className="hover:text-toska-400 transition-colors cursor-pointer">{locale === 'id' ? 'Kebijakan Privasi' : 'Privacy Policy'}</span></li>
+                <li><a href="#syarat-ketentuan" className="hover:text-toska-400 transition-colors">{t('termsTitle')}</a></li>
+                <li><a href="#kebijakan-privasi" className="hover:text-toska-400 transition-colors">{t('privacyTitle')}</a></li>
               </ul>
             </div>
             <div>
