@@ -255,14 +255,14 @@ export default function BookingManagement() {
       if (error) throw error;
       showToast('success', t('bookingDeleted'));
 
-      // Check if table is empty to reset sequence
-      const { count } = await supabase.from('bookings').select('*', { count: 'exact', head: true });
-      if (count === 0) {
-        try {
-          await supabase.rpc('reset_bookings_sequence');
-        } catch (rpcErr) {
-          console.warn('Failed to reset sequence via RPC (possibly function not created in DB yet):', rpcErr);
-        }
+      // Reset sequence after every delete so next ID follows max(id) + 1
+      // If table becomes empty, sequence resets to 1
+      // This is handled automatically by the DB trigger, but we call RPC
+      // as a safety net in case the trigger is not installed
+      try {
+        await supabase.rpc('reset_bookings_sequence');
+      } catch (rpcErr) {
+        console.warn('reset_bookings_sequence RPC not available (trigger handles it):', rpcErr);
       }
 
       loadBookings();
@@ -272,6 +272,7 @@ export default function BookingManagement() {
     }
     setDeleteConfirm(null);
   };
+
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'ktp' | 'sim') => {
     const file = e.target.files?.[0];
