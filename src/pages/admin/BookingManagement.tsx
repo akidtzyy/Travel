@@ -434,7 +434,7 @@ export default function BookingManagement() {
     const rows = filteredBookings.map(b => [
       b.id, `"${b.name}"`, b.email, b.phone,
       b.booking_type, `"${b.item_name}"`, b.date, b.duration,
-      `"${b.total_price}"`, b.status, getPaymentStatus(b.status), b.created_at?.slice(0, 10) || ''
+      `"${b.total_price}"`, b.status, b.payment_status || 'unpaid', b.created_at?.slice(0, 10) || ''
     ]);
     const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
