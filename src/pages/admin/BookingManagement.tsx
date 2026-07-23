@@ -1118,8 +1118,8 @@ export default function BookingManagement() {
                   </div>
                   <div>
                     <span className="text-slate-500 block mb-1">{t('paymentStatus')}</span>
-                    <span className={`inline-block px-2.5 py-0.5 rounded text-[11px] font-bold ${getPaymentStatusBadge(getPaymentStatus(selectedBooking.status))}`}>
-                      {getPaymentStatusLabel(getPaymentStatus(selectedBooking.status)).toUpperCase()}
+                    <span className={`inline-block px-2.5 py-0.5 rounded text-[11px] font-bold ${getPaymentStatusBadge(selectedBooking.payment_status || 'unpaid')}`}>
+                      {getPaymentStatusLabel(selectedBooking.payment_status || 'unpaid').toUpperCase()}
                     </span>
                   </div>
                 </div>
