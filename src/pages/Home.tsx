@@ -88,7 +88,7 @@ const fadeInUp = {
 };
 
 export default function Home() {
-  const { user, isLoggedIn } = useAuth();
+  const { user, isLoggedIn, profile } = useAuth();
   const { t, locale, translateText } = useI18n();
 
   const [packages, setPackages] = useState<TourPackage[]>([]);
@@ -133,16 +133,17 @@ export default function Home() {
     };
   }, []);
 
-  // Auto-fill user data when logged in
+  // Auto-fill user data when logged in or profile changes
   useEffect(() => {
-    if (user) {
+    if (isLoggedIn) {
       setBookingForm(prev => ({
         ...prev,
-        name: user.user_metadata?.full_name || prev.name,
-        email: user.email || prev.email,
+        name: profile?.full_name || user?.user_metadata?.full_name || prev.name,
+        email: profile?.email || user?.email || prev.email,
+        phone: profile?.phone || prev.phone,
       }));
     }
-  }, [user]);
+  }, [user, profile, isLoggedIn]);
 
   // Smart dropdown states
   const [selectedPkgId, setSelectedPkgId] = useState<number | ''>('');
@@ -827,9 +828,9 @@ export default function Home() {
                       type="text"
                       required
                       value={bookingForm.name}
-                      readOnly={!!user?.user_metadata?.full_name}
+                      readOnly={!!profile?.full_name || !!user?.user_metadata?.full_name}
                       onChange={e => setBookingForm(p => ({ ...p, name: e.target.value }))}
-                      className={`w-full px-4 py-3 rounded-xl border border-ocean-200 focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm ${user?.user_metadata?.full_name ? 'bg-ocean-100 text-ocean-600 cursor-not-allowed' : 'bg-white'}`}
+                      className={`w-full px-4 py-3 rounded-xl border border-ocean-200 focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm ${(profile?.full_name || user?.user_metadata?.full_name) ? 'bg-ocean-100 text-ocean-600 cursor-not-allowed' : 'bg-white'}`}
                       placeholder={locale === 'id' ? 'Nama Anda' : 'Your Name'}
                     />
                   </div>
@@ -840,9 +841,9 @@ export default function Home() {
                       type="email"
                       required
                       value={bookingForm.email}
-                      readOnly={!!user?.email}
+                      readOnly={!!profile?.email || !!user?.email}
                       onChange={e => setBookingForm(p => ({ ...p, email: e.target.value }))}
-                      className={`w-full px-4 py-3 rounded-xl border border-ocean-200 focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm ${user?.email ? 'bg-ocean-100 text-ocean-600 cursor-not-allowed' : 'bg-white'}`}
+                      className={`w-full px-4 py-3 rounded-xl border border-ocean-200 focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm ${(profile?.email || user?.email) ? 'bg-ocean-100 text-ocean-600 cursor-not-allowed' : 'bg-white'}`}
                       placeholder="email@contoh.com"
                     />
                   </div>

@@ -22,7 +22,7 @@ interface CarRental {
 }
 
 export default function CarRentalPage() {
-  const { user, isLoggedIn } = useAuth();
+  const { user, isLoggedIn, profile } = useAuth();
   const { t, locale, translateText } = useI18n();
   const [cars, setCars] = useState<CarRental[]>([]);
   const [loading, setLoading] = useState(true);
@@ -75,16 +75,17 @@ export default function CarRentalPage() {
     loadCars();
   }, []);
 
-  // Auto-fill user data when logged in
+  // Auto-fill user data when logged in or profile changes
   useEffect(() => {
-    if (user) {
+    if (isLoggedIn) {
       setBookingForm(prev => ({
         ...prev,
-        name: user.user_metadata?.full_name || prev.name,
-        email: user.email || prev.email,
+        name: profile?.full_name || user?.user_metadata?.full_name || prev.name,
+        email: profile?.email || user?.email || prev.email,
+        phone: profile?.phone || prev.phone,
       }));
     }
-  }, [user]);
+  }, [user, profile, isLoggedIn]);
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(price);
@@ -418,9 +419,9 @@ export default function CarRentalPage() {
                     type="text"
                     required
                     value={bookingForm.name}
-                    readOnly={isLoggedIn && !!user?.user_metadata?.full_name}
+                    readOnly={isLoggedIn && (!!profile?.full_name || !!user?.user_metadata?.full_name)}
                     onChange={e => setBookingForm(p => ({ ...p, name: e.target.value }))}
-                    className={`w-full px-4 py-3 rounded-xl border border-ocean-200 focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm ${isLoggedIn && user?.user_metadata?.full_name ? 'bg-ocean-100 text-ocean-600 cursor-not-allowed' : 'bg-white'}`}
+                    className={`w-full px-4 py-3 rounded-xl border border-ocean-200 focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm ${isLoggedIn && (profile?.full_name || user?.user_metadata?.full_name) ? 'bg-ocean-100 text-ocean-600 cursor-not-allowed' : 'bg-white'}`}
                     placeholder={locale === 'id' ? 'Nama Anda' : 'Your Name'}
                   />
                 </div>
@@ -431,9 +432,9 @@ export default function CarRentalPage() {
                     type="email"
                     required
                     value={bookingForm.email}
-                    readOnly={isLoggedIn && !!user?.email}
+                    readOnly={isLoggedIn && (!!profile?.email || !!user?.email)}
                     onChange={e => setBookingForm(p => ({ ...p, email: e.target.value }))}
-                    className={`w-full px-4 py-3 rounded-xl border border-ocean-200 focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm ${isLoggedIn && user?.email ? 'bg-ocean-100 text-ocean-600 cursor-not-allowed' : 'bg-white'}`}
+                    className={`w-full px-4 py-3 rounded-xl border border-ocean-200 focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm ${isLoggedIn && (profile?.email || user?.email) ? 'bg-ocean-100 text-ocean-600 cursor-not-allowed' : 'bg-white'}`}
                     placeholder="email@contoh.com"
                   />
                 </div>
