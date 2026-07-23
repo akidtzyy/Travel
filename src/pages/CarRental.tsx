@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Car, Users, Clock, CheckCircle, Send, ArrowLeft, Fuel, Settings, AlertTriangle } from 'lucide-react';
+import { Car, Users, Clock, CheckCircle, Send, ArrowLeft, Fuel, Settings, AlertTriangle, UserCheck, FileText } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import Lenis from 'lenis';
 import Footer from '../components/Footer';
@@ -28,12 +28,30 @@ export default function CarRentalPage() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'self_drive' | 'with_driver'>('self_drive');
   const [bookingForm, setBookingForm] = useState({
-    name: '', email: '', phone: '', item_name: '', booking_type: 'car', date: '', duration: '', notes: '', total_price: ''
+    name: '',
+    email: '',
+    phone: '',
+    nationality_type: 'WNI',
+    identity_type: 'NIK',
+    identity_number: '',
+    country_origin: '',
+    item_name: '',
+    booking_type: 'car',
+    date: '',
+    duration: '',
+    notes: '',
+    total_price: ''
   });
   const [bookingSuccess, setBookingSuccess] = useState(false);
   const [bookingLoading, setBookingLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [selectedCarId, setSelectedCarId] = useState<number | ''>('');
+
+  // File upload states
+  const [ktpPassportFile, setKtpPassportFile] = useState<File | null>(null);
+  const [ktpPassportPreview, setKtpPassportPreview] = useState<string | null>(null);
+  const [simIdpFile, setSimIdpFile] = useState<File | null>(null);
+  const [simIdpPreview, setSimIdpPreview] = useState<string | null>(null);
 
   // Lenis smooth scrolling
   useEffect(() => {
@@ -107,42 +125,143 @@ export default function CarRentalPage() {
     }
   }, [selectedCar, t, translateText]);
 
+  // Auto-fill user data when logged in or profile changes
+  useEffect(() => {
+    if (isLoggedIn) {
+      setBookingForm(prev => ({
+        ...prev,
+        name: profile?.full_name || user?.user_metadata?.full_name || prev.name,
+        email: profile?.email || user?.email || prev.email,
+        phone: profile?.phone || prev.phone,
+        nationality_type: profile?.nationality_type || prev.nationality_type,
+        identity_type: profile?.identity_type || prev.identity_type,
+        identity_number: profile?.identity_number || prev.identity_number,
+        country_origin: profile?.country_origin || prev.country_origin,
+      }));
+    }
+  }, [user, profile, isLoggedIn]);
+
+  const uploadDoc = async (file: File, folder: string): Promise<string | null> => {
+    const ext = file.name.split('.').pop();
+    const path = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    const { error } = await supabase.storage
+      .from('booking-documents')
+      .upload(path, file, { contentType: file.type, upsert: false });
+    if (error) { console.error('Upload error:', error); return null; }
+    const { data } = supabase.storage.from('booking-documents').getPublicUrl(path);
+    return data.publicUrl;
+  };
+
   const handleBooking = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    // Format pesan WhatsApp (selalu gunakan bahasa Indonesia untuk admin)
-    const message = `*BOOKING SEWA MOBIL - ClickAndGo Journey*%0A%0A` +
-      `*Kendaraan:* ${bookingForm.item_name}%0A` +
-      `*Durasi Sewa:* ${bookingForm.duration || 'Belum ditentukan'}%0A` +
-      `*Harga:* ${bookingForm.total_price}%0A%0A` +
-      `*Data Pemesan:*%0A` +
-      `Nama: ${bookingForm.name}%0A` +
-      `Email: ${bookingForm.email}%0A` +
-      `WhatsApp: ${bookingForm.phone}%0A` +
-      `Tanggal Sewa: ${bookingForm.date}%0A%0A` +
-      `${bookingForm.notes ? `*Catatan:*%0A${bookingForm.notes}%0A%0A` : ''}` +
-      `Mohon informasi lebih lanjut. Terima kasih!`;
-
-    // Nomor WhatsApp admin
-    const whatsappNumber = '6281243499265'; // Format: 62xxx (tanpa + atau 0)
+    setBookingLoading(true);
 
     try {
-      setBookingLoading(true);
       const cleanPhone = bookingForm.phone.replace(/\D/g, '');
       const notesWithDetails = `Tipe: Sewa Mobil\nKendaraan: ${bookingForm.item_name}\nDurasi: ${bookingForm.duration}\nTanggal Sewa: ${bookingForm.date}\nHarga: ${bookingForm.total_price}\nCatatan: ${bookingForm.notes}`;
 
-      // Original Customer insert
-      const { error: custErr } = await supabase.from('customers').insert({
-        full_name: bookingForm.name,
-        phone: cleanPhone,
-        email: bookingForm.email,
-        booking_status: 'booked',
-        notes: notesWithDetails
-      });
-      if (custErr) throw custErr;
+      // 1. Validation for uploads
+      const isVerified = profile?.identity_verification_status === 'VERIFIED';
+      if (!isVerified) {
+        if (bookingForm.nationality_type === 'WNI') {
+          if (!ktpPassportFile) {
+            alert(locale === 'id' ? 'Foto KTP/SIM wajib diunggah!' : 'KTP/SIM photo is required!');
+            setBookingLoading(false);
+            return;
+          }
+        } else {
+          // WNA
+          if (!ktpPassportFile) {
+            alert(locale === 'id' ? 'Foto Paspor wajib diunggah!' : 'Passport photo is required!');
+            setBookingLoading(false);
+            return;
+          }
+          if (!simIdpFile) {
+            alert(locale === 'id' ? 'Foto International Driving Permit (IDP) wajib diunggah!' : 'International Driving Permit (IDP) photo is required!');
+            setBookingLoading(false);
+            return;
+          }
+        }
+      }
 
-      // NEW Bookings insert
+      // 2. Upload documents
+      let ktpPassportUrl = profile?.ktp_sim_passport_url || null;
+      let simIdpUrl = null;
+
+      if (!isVerified) {
+        if (ktpPassportFile) {
+          const folder = bookingForm.nationality_type === 'WNI' ? 'ktp' : 'passport';
+          ktpPassportUrl = await uploadDoc(ktpPassportFile, folder);
+        }
+        if (simIdpFile) {
+          const folder = bookingForm.nationality_type === 'WNI' ? 'sim' : 'idp';
+          simIdpUrl = await uploadDoc(simIdpFile, folder);
+        }
+      }
+
+      // 3. Find or Create Customer
+      let customerId = null;
+      const { data: existingCust } = await supabase
+        .from('customers')
+        .select('id')
+        .or(`email.eq.${bookingForm.email},phone.eq.${cleanPhone}`)
+        .limit(1);
+
+      if (existingCust && existingCust.length > 0) {
+        customerId = existingCust[0].id;
+        await supabase.from('customers').update({
+          full_name: bookingForm.name,
+          phone: cleanPhone,
+          email: bookingForm.email,
+          nationality_type: bookingForm.nationality_type,
+          identity_type: bookingForm.identity_type,
+          identity_number: bookingForm.identity_number,
+          country_origin: bookingForm.country_origin || null,
+          ...(ktpPassportUrl ? { ktp_sim_passport_url: ktpPassportUrl } : {}),
+          user_id: user?.id || null,
+          updated_at: new Date().toISOString()
+        }).eq('id', customerId);
+      } else {
+        const { data: newCust, error: custErr } = await supabase
+          .from('customers')
+          .insert({
+            full_name: bookingForm.name,
+            phone: cleanPhone,
+            email: bookingForm.email,
+            nationality_type: bookingForm.nationality_type,
+            identity_type: bookingForm.identity_type,
+            identity_number: bookingForm.identity_number,
+            country_origin: bookingForm.country_origin || null,
+            ktp_sim_passport_url: ktpPassportUrl,
+            identity_verification_status: 'UNVERIFIED',
+            booking_status: 'booked',
+            user_id: user?.id || null,
+            notes: notesWithDetails
+          })
+          .select('id')
+          .single();
+        if (custErr) throw custErr;
+        customerId = newCust.id;
+      }
+
+      // 4. Create Snapshot
+      const snapshot = {
+        name: bookingForm.name,
+        email: bookingForm.email,
+        phone: cleanPhone,
+        nationality_type: bookingForm.nationality_type,
+        identity_type: bookingForm.identity_type,
+        identity_number: bookingForm.identity_number,
+        country_origin: bookingForm.country_origin || null,
+        ktp_sim_passport_url: ktpPassportUrl || null,
+        item_name: bookingForm.item_name,
+        total_price: bookingForm.total_price,
+      };
+
+      // 5. Insert Booking
       const { error: bookingErr } = await supabase.from('bookings').insert({
+        customer_id: customerId,
+        nik: bookingForm.nationality_type === 'WNI' ? bookingForm.identity_number : '',
         name: bookingForm.name,
         email: bookingForm.email,
         phone: cleanPhone,
@@ -152,31 +271,59 @@ export default function CarRentalPage() {
         duration: bookingForm.duration,
         notes: bookingForm.notes,
         total_price: bookingForm.total_price,
-        status: 'pending'
+        status: 'pending',
+        payment_status: 'unpaid',
+        ktp_url: ktpPassportUrl || null,
+        sim_url: simIdpUrl || null,
+        booking_details_snapshot: snapshot
       });
       if (bookingErr) throw bookingErr;
 
       setBookingSuccess(true);
+
+      // WhatsApp Message redirection
+      const message = `*BOOKING SEWA MOBIL - ClickAndGo Journey*%0A%0A` +
+        `*Kendaraan:* ${bookingForm.item_name}%0A` +
+        `*Durasi Sewa:* ${bookingForm.duration || 'Belum ditentukan'}%0A` +
+        `*Harga:* ${bookingForm.total_price}%0A%0A` +
+        `*Data Pemesan:*%0A` +
+        `Nama: ${bookingForm.name}%0A` +
+        `Email: ${bookingForm.email}%0A` +
+        `WhatsApp: ${bookingForm.phone}%0A` +
+        `Tanggal Sewa: ${bookingForm.date}%0A%0A` +
+        `${bookingForm.notes ? `*Catatan:*%0A${bookingForm.notes}%0A%0A` : ''}` +
+        `Mohon informasi lebih lanjut. Terima kasih!`;
+      const whatsappNumber = '6281243499265';
+      window.open(`https://wa.me/${whatsappNumber}?text=${message}`, '_blank');
+
+      // Reset form
+      setBookingForm({
+        name: '',
+        email: '',
+        phone: '',
+        nationality_type: 'WNI',
+        identity_type: 'NIK',
+        identity_number: '',
+        country_origin: '',
+        item_name: '',
+        booking_type: 'car',
+        date: '',
+        duration: '',
+        notes: '',
+        total_price: ''
+      });
+      setKtpPassportFile(null);
+      setKtpPassportPreview(null);
+      setSimIdpFile(null);
+      setSimIdpPreview(null);
+      setSelectedCarId('');
+      setTimeout(() => setBookingSuccess(false), 5000);
+
     } catch (err) {
       console.error("Gagal menyimpan data sewa ke database:", err);
     } finally {
       setBookingLoading(false);
     }
-
-    // Redirect ke WhatsApp
-    window.open(`https://wa.me/${whatsappNumber}?text=${message}`, '_blank');
-
-    // Reset form
-    setBookingForm(prev => ({
-      ...prev,
-      item_name: '',
-      date: '',
-      duration: '',
-      notes: '',
-      total_price: ''
-    }));
-    setSelectedCarId('');
-    setTimeout(() => setBookingSuccess(false), 5000);
   };
 
   const selectCar = (car: CarRental) => {
@@ -477,6 +624,155 @@ export default function CarRentalPage() {
                     className="w-full px-4 py-3 rounded-xl border border-ocean-200 bg-white focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm"
                   />
                 </div>
+
+                {/* Kewarganegaraan */}
+                <div className="sm:col-span-2">
+                  <label className="block text-sm font-medium text-ocean-800 mb-1.5">{locale === 'id' ? 'Kewarganegaraan' : 'Nationality'} *</label>
+                  <div className="flex gap-6 mt-2">
+                    <label className="flex items-center gap-2 text-sm text-ocean-700 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="nationality_type"
+                        value="WNI"
+                        checked={bookingForm.nationality_type === 'WNI'}
+                        onChange={() => {
+                          setBookingForm(p => ({
+                            ...p,
+                            nationality_type: 'WNI',
+                            identity_type: 'NIK',
+                            country_origin: ''
+                          }));
+                        }}
+                        className="w-4 h-4 text-toska-500 focus:ring-toska-500 border-ocean-200"
+                      />
+                      WNI (Warga Negara Indonesia)
+                    </label>
+                    <label className="flex items-center gap-2 text-sm text-ocean-700 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="nationality_type"
+                        value="WNA"
+                        checked={bookingForm.nationality_type === 'WNA'}
+                        onChange={() => {
+                          setBookingForm(p => ({
+                            ...p,
+                            nationality_type: 'WNA',
+                            identity_type: 'PASSPORT',
+                            country_origin: ''
+                          }));
+                        }}
+                        className="w-4 h-4 text-toska-500 focus:ring-toska-500 border-ocean-200"
+                      />
+                      WNA (Warga Negara Asing / Foreigner)
+                    </label>
+                  </div>
+                </div>
+
+                {/* NIK / Paspor */}
+                <div className="sm:col-span-2">
+                  <label className="block text-sm font-medium text-ocean-800 mb-1.5">
+                    {bookingForm.nationality_type === 'WNI' ? 'NIK (16 Digit Angka)' : 'Nomor Paspor / Passport Number'} *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    maxLength={bookingForm.nationality_type === 'WNI' ? 16 : 20}
+                    value={bookingForm.identity_number}
+                    onChange={e => {
+                      const val = bookingForm.nationality_type === 'WNI'
+                        ? e.target.value.replace(/[^0-9]/g, '')
+                        : e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+                      setBookingForm(p => ({ ...p, identity_number: val }));
+                    }}
+                    placeholder={bookingForm.nationality_type === 'WNI' ? 'Contoh: 3171012345678901' : 'e.g. A1234567'}
+                    className="w-full px-4 py-3 rounded-xl border border-ocean-200 bg-white focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm font-mono"
+                  />
+                </div>
+
+                {/* Negara Asal (Only WNA) */}
+                {bookingForm.nationality_type === 'WNA' && (
+                  <div className="sm:col-span-2">
+                    <label className="block text-sm font-medium text-ocean-800 mb-1.5">
+                      {locale === 'id' ? 'Negara Asal' : 'Country of Origin'} *
+                    </label>
+                    <select
+                      required
+                      value={bookingForm.country_origin}
+                      onChange={e => setBookingForm(p => ({ ...p, country_origin: e.target.value }))}
+                      className="w-full px-4 py-3 rounded-xl border border-ocean-200 bg-white focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm text-slate-800"
+                    >
+                      <option value="">— {locale === 'id' ? 'Pilih negara' : 'Select country'} —</option>
+                      {['Australia', 'Singapore', 'Malaysia', 'United States', 'United Kingdom', 'Japan', 'South Korea', 'Germany', 'France', 'China', 'India', 'Canada', 'Netherlands', 'Other'].map(country => (
+                        <option key={country} value={country}>{country}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* Upload Documents */}
+                {profile?.identity_verification_status === 'VERIFIED' ? (
+                  <div className="sm:col-span-2 p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl flex items-center gap-3 text-sm font-medium">
+                    <UserCheck className="w-5 h-5 text-emerald-500 shrink-0" />
+                    <div>
+                      <p>{locale === 'id' ? 'Identitas Terverifikasi' : 'Identity Verified'}</p>
+                      <p className="text-xs text-emerald-600 font-normal mt-0.5">
+                        {locale === 'id'
+                          ? 'Dokumen identitas Anda telah diverifikasi oleh admin. Tidak perlu upload ulang.'
+                          : 'Your identity document has been verified by the admin. No re-upload needed.'}
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {/* Doc 1: KTP/SIM or Passport */}
+                    <div>
+                      <label className="block text-sm font-medium text-ocean-800 mb-1.5">
+                        {bookingForm.nationality_type === 'WNI' ? 'Upload Foto KTP/SIM *' : 'Upload Foto Paspor *'}
+                      </label>
+                      <input
+                        type="file"
+                        required
+                        accept="image/*"
+                        onChange={e => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            setKtpPassportFile(file);
+                            setKtpPassportPreview(URL.createObjectURL(file));
+                          }
+                        }}
+                        className="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-toska-50 file:text-toska-700 hover:file:bg-toska-100"
+                      />
+                      {ktpPassportPreview && (
+                        <img src={ktpPassportPreview} alt="Preview" className="mt-2 w-32 h-20 object-cover rounded-xl border border-ocean-100" />
+                      )}
+                    </div>
+
+                    {/* Doc 2: IDP (Only WNA) */}
+                    {bookingForm.nationality_type === 'WNA' && (
+                      <div>
+                        <label className="block text-sm font-medium text-ocean-800 mb-1.5">
+                          Upload International Driving Permit (IDP) *
+                        </label>
+                        <input
+                          type="file"
+                          required
+                          accept="image/*"
+                          onChange={e => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              setSimIdpFile(file);
+                              setSimIdpPreview(URL.createObjectURL(file));
+                            }
+                          }}
+                          className="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-toska-50 file:text-toska-700 hover:file:bg-toska-100"
+                        />
+                        {simIdpPreview && (
+                          <img src={simIdpPreview} alt="Preview IDP" className="mt-2 w-32 h-20 object-cover rounded-xl border border-ocean-100" />
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
 
                 {/* Tipe Sewa */}
                 <div className="sm:col-span-2">

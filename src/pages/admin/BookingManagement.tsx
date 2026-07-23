@@ -22,7 +22,7 @@ interface Booking {
   notes: string;
   total_price: string;
   // Booking status = admin approval of document completeness
-  status: 'pending' | 'confirmed' | 'paid' | 'completed' | 'cancelled';
+  status: 'pending' | 'confirmed' | 'paid' | 'completed' | 'cancelled' | 'rescheduled' | 'expired';
   // Payment status = auto-updated by Midtrans webhook
   payment_status: 'unpaid' | 'pending' | 'paid' | 'failed' | 'expired' | 'challenge';
   ktp_url: string | null;
@@ -30,9 +30,13 @@ interface Booking {
   order_id: string | null;
   paid_at: string | null;
   created_at: string;
+  payment_link?: string | null;
+  reschedule_notes?: string | null;
+  original_booking_date?: string | null;
 }
 
 interface AddBookingForm {
+  customer_id?: number | null;
   nik: string;
   name: string;
   email: string;
@@ -43,7 +47,11 @@ interface AddBookingForm {
   duration: string;
   notes: string;
   total_price: string;
-  status: 'pending' | 'confirmed' | 'paid' | 'completed' | 'cancelled';
+  status: 'pending' | 'confirmed' | 'rescheduled' | 'completed' | 'cancelled' | 'expired';
+  nationality_type: 'WNI' | 'WNA';
+  identity_type: 'NIK' | 'PASSPORT';
+  identity_number: string;
+  country_origin: string;
 }
 
 const paxLabels: Record<string, string> = {
@@ -83,6 +91,7 @@ export default function BookingManagement() {
   const ktpInputRef = useRef<HTMLInputElement>(null);
   const simInputRef = useRef<HTMLInputElement>(null);
   const [addForm, setAddForm] = useState<AddBookingForm>({
+    customer_id: null,
     nik: '',
     name: '',
     email: '',
@@ -94,7 +103,60 @@ export default function BookingManagement() {
     notes: '',
     total_price: '',
     status: 'pending',
+    nationality_type: 'WNI',
+    identity_type: 'NIK',
+    identity_number: '',
+    country_origin: '',
   });
+
+  // Autocomplete Lookup & Verification states
+  const [custSearchQuery, setCustSearchQuery] = useState('');
+  const [custSuggestions, setCustSuggestions] = useState<any[]>([]);
+  const [selectedCustVerificationStatus, setSelectedCustVerificationStatus] = useState('UNVERIFIED');
+
+  // Reschedule Modal states
+  const [showRescheduleModal, setShowRescheduleModal] = useState(false);
+  const [rescheduleBooking, setRescheduleBooking] = useState<Booking | null>(null);
+  const [newRescheduleDate, setNewRescheduleDate] = useState('');
+  const [rescheduleNotes, setRescheduleNotes] = useState('');
+  const [rescheduleLoading, setRescheduleLoading] = useState(false);
+
+  const handleCustomerSearch = async (query: string) => {
+    setCustSearchQuery(query);
+    if (query.trim().length < 2) {
+      setCustSuggestions([]);
+      return;
+    }
+    try {
+      const { data, error } = await supabase
+        .from('customers')
+        .select('*')
+        .or(`full_name.ilike.%${query}%,phone.ilike.%${query}%,email.ilike.%${query}%`)
+        .limit(5);
+      if (error) throw error;
+      setCustSuggestions(data || []);
+    } catch (err) {
+      console.error('Error fetching customer suggestions:', err);
+    }
+  };
+
+  const handleSelectCustomer = (cust: any) => {
+    setAddForm(prev => ({
+      ...prev,
+      customer_id: cust.id,
+      nik: cust.identity_number || cust.nik || '',
+      name: cust.full_name,
+      email: cust.email,
+      phone: cust.phone,
+      nationality_type: cust.nationality_type || 'WNI',
+      identity_type: cust.identity_type || 'NIK',
+      identity_number: cust.identity_number || cust.nik || '',
+      country_origin: cust.country_origin || '',
+    }));
+    setSelectedCustVerificationStatus(cust.identity_verification_status || 'UNVERIFIED');
+    setCustSearchQuery('');
+    setCustSuggestions([]);
+  };
 
   // Pagination
   const [page, setPage] = useState(1);
@@ -252,6 +314,38 @@ export default function BookingManagement() {
     }
   };
 
+  const handleReschedule = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!rescheduleBooking) return;
+    setRescheduleLoading(true);
+
+    try {
+      const originalDate = rescheduleBooking.date;
+      const { error } = await supabase
+        .from('bookings')
+        .update({
+          date: newRescheduleDate,
+          original_booking_date: originalDate,
+          status: 'rescheduled',
+          reschedule_notes: rescheduleNotes,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', rescheduleBooking.id);
+
+      if (error) throw error;
+
+      showToast('success', locale === 'id' ? 'Pemesanan berhasil di-reschedule!' : 'Booking successfully rescheduled!');
+      setShowRescheduleModal(false);
+      setRescheduleBooking(null);
+      loadBookings();
+    } catch (err: any) {
+      console.error('Error rescheduling booking:', err);
+      showToast('error', err?.message || t('errorOccurred'));
+    } finally {
+      setRescheduleLoading(false);
+    }
+  };
+
   const deleteBooking = async (id: number) => {
     try {
       const { error } = await supabase.from('bookings').delete().eq('id', id);
@@ -297,10 +391,36 @@ export default function BookingManagement() {
   };
 
   const resetAddForm = () => {
-    setAddForm({ nik: '', name: '', email: '', phone: '', booking_type: 'package', item_name: '', date: '', duration: '', notes: '', total_price: '', status: 'pending' });
-    setKtpFile(null); setSimFile(null); setKtpPreview(null); setSimPreview(null);
-    setSelectedPkgId(''); setSelectedHotelIdx(''); setSelectedPaxKey('');
-    setSelectedCarId(''); setSelectedCarType('self_drive');
+    setAddForm({
+      customer_id: null,
+      nik: '',
+      name: '',
+      email: '',
+      phone: '',
+      booking_type: 'package',
+      item_name: '',
+      date: '',
+      duration: '',
+      notes: '',
+      total_price: '',
+      status: 'pending',
+      nationality_type: 'WNI',
+      identity_type: 'NIK',
+      identity_number: '',
+      country_origin: '',
+    });
+    setKtpFile(null);
+    setSimFile(null);
+    setKtpPreview(null);
+    setSimPreview(null);
+    setSelectedPkgId('');
+    setSelectedHotelIdx('');
+    setSelectedPaxKey('');
+    setSelectedCarId('');
+    setSelectedCarType('self_drive');
+    setCustSearchQuery('');
+    setCustSuggestions([]);
+    setSelectedCustVerificationStatus('UNVERIFIED');
     if (ktpInputRef.current) ktpInputRef.current.value = '';
     if (simInputRef.current) simInputRef.current.value = '';
   };
@@ -312,32 +432,136 @@ export default function BookingManagement() {
       let ktp_url: string | null = null;
       let sim_url: string | null = null;
 
-      if (!ktpFile) {
-        showToast('error', locale === 'id' ? 'Foto KTP wajib diupload!' : 'KTP photo is required!');
-        setAddLoading(false);
-        return;
-      }
-      if (addForm.booking_type === 'car' && !simFile) {
-        showToast('error', locale === 'id' ? 'Foto SIM wajib diupload untuk sewa mobil!' : 'SIM photo is required for car rental!');
-        setAddLoading(false);
-        return;
+      const isVerified = selectedCustVerificationStatus === 'VERIFIED';
+      if (!isVerified) {
+        if (addForm.nationality_type === 'WNI') {
+          if (addForm.booking_type === 'car' && !ktpFile) {
+            showToast('error', locale === 'id' ? 'Foto KTP/SIM wajib diunggah!' : 'KTP/SIM photo is required!');
+            setAddLoading(false);
+            return;
+          }
+        } else {
+          // WNA
+          if (!ktpFile) {
+            showToast('error', locale === 'id' ? 'Foto Paspor wajib diunggah!' : 'Passport photo is required!');
+            setAddLoading(false);
+            return;
+          }
+          if (addForm.booking_type === 'car' && !simFile) {
+            showToast('error', locale === 'id' ? 'Foto International Driving Permit (IDP) wajib diunggah!' : 'International Driving Permit (IDP) photo is required!');
+            setAddLoading(false);
+            return;
+          }
+        }
       }
 
       if (ktpFile) {
-        ktp_url = await uploadDoc(ktpFile, 'ktp');
+        ktp_url = await uploadDoc(ktpFile, addForm.nationality_type === 'WNI' ? 'ktp' : 'passport');
         if (!ktp_url) { showToast('error', t('docUploadError')); setAddLoading(false); return; }
       }
       if (simFile) {
-        sim_url = await uploadDoc(simFile, 'sim');
+        sim_url = await uploadDoc(simFile, addForm.nationality_type === 'WNI' ? 'sim' : 'idp');
         if (!sim_url) { showToast('error', t('docUploadError')); setAddLoading(false); return; }
       }
 
-      const { error } = await supabase.from('bookings').insert({
-        ...addForm,
+      // Find or Create Customer record
+      let customerId = addForm.customer_id;
+      const cleanPhone = addForm.phone.replace(/\D/g, '');
+      const notesWithDetails = `Tipe: ${addForm.booking_type === 'package' ? 'Paket Wisata' : 'Sewa Mobil'}\nItem: ${addForm.item_name}\nJumlah/Durasi: ${addForm.duration}\nTanggal: ${addForm.date}\nHarga: ${addForm.total_price}\nCatatan: ${addForm.notes}`;
+
+      if (!customerId) {
+        const { data: existingCust } = await supabase
+          .from('customers')
+          .select('id, identity_verification_status')
+          .or(`email.eq.${addForm.email},phone.eq.${cleanPhone}`)
+          .limit(1);
+
+        if (existingCust && existingCust.length > 0) {
+          customerId = existingCust[0].id;
+          await supabase.from('customers').update({
+            full_name: addForm.name,
+            phone: cleanPhone,
+            email: addForm.email,
+            nationality_type: addForm.nationality_type,
+            identity_type: addForm.identity_type,
+            identity_number: addForm.identity_number,
+            country_origin: addForm.country_origin || null,
+            ...(ktp_url ? { ktp_sim_passport_url: ktp_url } : {}),
+            updated_at: new Date().toISOString()
+          }).eq('id', customerId);
+        } else {
+          const { data: newCust, error: custErr } = await supabase.from('customers').insert({
+            full_name: addForm.name,
+            phone: cleanPhone,
+            email: addForm.email,
+            nationality_type: addForm.nationality_type,
+            identity_type: addForm.identity_type,
+            identity_number: addForm.identity_number,
+            country_origin: addForm.country_origin || null,
+            ktp_sim_passport_url: ktp_url || null,
+            identity_verification_status: 'UNVERIFIED',
+            booking_status: 'booked',
+            notes: notesWithDetails
+          }).select('id').single();
+          
+          if (custErr) throw custErr;
+          customerId = newCust.id;
+        }
+      }
+
+      // Create Snapshot
+      const snapshot = {
+        name: addForm.name,
+        email: addForm.email,
+        phone: cleanPhone,
+        nationality_type: addForm.nationality_type,
+        identity_type: addForm.identity_type,
+        identity_number: addForm.identity_number,
+        country_origin: addForm.country_origin || null,
+        ktp_sim_passport_url: ktp_url || null,
+        item_name: addForm.item_name,
+        total_price: addForm.total_price,
+      };
+
+      // Insert Booking linked to customerId
+      const { data: bookingData, error: bookingErr } = await supabase.from('bookings').insert({
+        customer_id: customerId,
+        nik: addForm.nationality_type === 'WNI' ? addForm.identity_number : '',
+        name: addForm.name,
+        email: addForm.email,
+        phone: cleanPhone,
+        booking_type: addForm.booking_type,
+        item_name: addForm.item_name,
+        date: addForm.date,
+        duration: addForm.duration,
+        notes: addForm.notes,
+        total_price: addForm.total_price,
+        status: addForm.status,
+        payment_status: 'unpaid',
         ktp_url,
         sim_url,
-      });
-      if (error) throw error;
+        booking_details_snapshot: snapshot
+      }).select('id').single();
+      if (bookingErr) throw bookingErr;
+
+      // Auto-trigger Midtrans Payment Link Generation
+      try {
+        await fetch('/api/payment', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            booking_id: bookingData.id,
+            name: addForm.name,
+            email: addForm.email,
+            phone: cleanPhone,
+            item_name: addForm.item_name,
+            total_price: addForm.total_price,
+            booking_type: addForm.booking_type
+          })
+        });
+      } catch (payErr) {
+        console.warn('Error auto-generating payment link:', payErr);
+      }
 
       showToast('success', t('bookingAdded'));
       setShowAddModal(false);
@@ -356,9 +580,11 @@ export default function BookingManagement() {
     const badges: Record<string, string> = {
       pending: 'bg-amber-50 text-amber-600 border border-amber-200',
       confirmed: 'bg-blue-50 text-blue-600 border border-blue-200',
+      rescheduled: 'bg-indigo-50 text-indigo-600 border border-indigo-200',
       paid: 'bg-emerald-50 text-emerald-600 border border-emerald-200',
       completed: 'bg-green-50 text-green-600 border border-green-200',
       cancelled: 'bg-red-50 text-red-600 border border-red-200',
+      expired: 'bg-slate-50 text-slate-500 border border-slate-200',
     };
     return badges[status] || 'bg-slate-50 text-slate-600 border border-slate-200';
   };
@@ -367,9 +593,11 @@ export default function BookingManagement() {
     const labels: Record<string, string> = {
       pending: t('pending'),
       confirmed: t('confirmed'),
+      rescheduled: locale === 'id' ? 'Rescheduled' : 'Rescheduled',
       paid: t('paid'),
       completed: t('completed'),
       cancelled: t('cancelled'),
+      expired: locale === 'id' ? 'Kedaluwarsa' : 'Expired',
     };
     return labels[status] || status;
   };
@@ -584,6 +812,30 @@ export default function BookingManagement() {
         </div>
       </div>
 
+      {/* Status Filter Tabs */}
+      <div className="flex border-b border-slate-200 gap-1 overflow-x-auto print:hidden mb-5 bg-white px-5 rounded-2xl border shadow-sm">
+        {[
+          { key: 'all', label: locale === 'id' ? 'Semua' : 'All' },
+          { key: 'pending', label: locale === 'id' ? 'Pending' : 'Pending' },
+          { key: 'confirmed', label: locale === 'id' ? 'Terkonfirmasi' : 'Confirmed' },
+          { key: 'rescheduled', label: locale === 'id' ? 'Rescheduled' : 'Rescheduled' },
+          { key: 'completed', label: locale === 'id' ? 'Selesai' : 'Completed' },
+          { key: 'cancelled', label: locale === 'id' ? 'Dibatalkan' : 'Cancelled' },
+          { key: 'expired', label: locale === 'id' ? 'Expired' : 'Expired' },
+        ].map(tab => (
+          <button
+            key={tab.key}
+            onClick={() => { setStatusFilter(tab.key); setPage(1); }}
+            className={`px-5 py-3 text-sm font-semibold transition-all border-b-2 shrink-0 ${statusFilter === tab.key
+              ? 'border-toska-500 text-toska-600 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
       {/* Filter and Search Bar */}
       <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-4 print:hidden">
         {/* Search */}
@@ -591,7 +843,7 @@ export default function BookingManagement() {
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
           <input
             type="text"
-            placeholder={locale === 'id' ? 'Cari nama, email, hp, atau item...' : 'Search name, email, phone, or item...'}
+            placeholder={locale === 'id' ? 'Cari nama, email, hp, atau NIK...' : 'Search name, email, phone, or NIK...'}
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
             className="w-full pl-11 pr-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-toska-500 focus:border-transparent text-sm text-slate-800 placeholder-slate-400"
@@ -600,23 +852,6 @@ export default function BookingManagement() {
 
         {/* Filters Dropdown */}
         <div className="flex flex-wrap gap-2.5">
-          {/* Status Booking */}
-          <div className="relative">
-            <select
-              value={statusFilter}
-              onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
-              className="appearance-none pl-4 pr-10 py-2.5 rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-toska-500 text-sm text-slate-700 font-medium"
-            >
-              <option value="all">{locale === 'id' ? 'Status: Semua' : 'Status: All'}</option>
-              <option value="pending">{t('pending')}</option>
-              <option value="confirmed">{t('confirmed')}</option>
-              <option value="paid">{t('paid')}</option>
-              <option value="completed">{t('completed')}</option>
-              <option value="cancelled">{t('cancelled')}</option>
-            </select>
-            <Filter className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-          </div>
-
           {/* Status Pembayaran */}
           <div className="relative">
             <select
@@ -724,6 +959,73 @@ export default function BookingManagement() {
                         >
                           <Printer className="w-4 h-4" />
                         </button>
+
+                        {/* Reschedule Booking */}
+                        {(b.status === 'pending' || b.status === 'confirmed' || b.status === 'rescheduled') && (
+                          <button
+                            onClick={() => {
+                              setRescheduleBooking(b);
+                              setNewRescheduleDate(b.date);
+                              setRescheduleNotes(b.reschedule_notes || '');
+                              setShowRescheduleModal(true);
+                            }}
+                            title="Reschedule Booking"
+                            className="p-1.5 text-slate-500 hover:text-toska-600 hover:bg-toska-50 rounded-lg transition-all"
+                          >
+                            <RefreshCw className="w-4 h-4" />
+                          </button>
+                        )}
+
+                        {/* Copy / Generate Payment Link */}
+                        {b.payment_link ? (
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(b.payment_link!);
+                              showToast('success', locale === 'id' ? 'Link Pembayaran disalin ke clipboard!' : 'Payment Link copied to clipboard!');
+                            }}
+                            title="Salin Link Pembayaran"
+                            className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                          >
+                            <ExternalLink className="w-4 h-4" />
+                          </button>
+                        ) : (
+                          b.payment_status !== 'paid' && (
+                            <button
+                              onClick={async () => {
+                                try {
+                                  const res = await fetch('/api/payment', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                      booking_id: b.id,
+                                      name: b.name,
+                                      email: b.email,
+                                      phone: b.phone,
+                                      item_name: b.item_name,
+                                      total_price: b.total_price,
+                                      booking_type: b.booking_type
+                                    })
+                                  });
+                                  const paymentRes = await res.json();
+                                  if (paymentRes.redirect_url) {
+                                    b.payment_link = paymentRes.redirect_url;
+                                    navigator.clipboard.writeText(paymentRes.redirect_url);
+                                    showToast('success', locale === 'id' ? 'Link Pembayaran dibuat & disalin!' : 'Payment Link generated & copied!');
+                                    loadBookings();
+                                  } else {
+                                    showToast('error', locale === 'id' ? 'Gagal membuat link pembayaran' : 'Failed to generate link');
+                                  }
+                                } catch (e) {
+                                  showToast('error', t('errorOccurred'));
+                                }
+                              }}
+                              title="Generate Payment Link"
+                              className="p-1.5 text-slate-500 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-all"
+                            >
+                              <DollarSign className="w-4 h-4" />
+                            </button>
+                          )
+                        )}
 
                         {/* WhatsApp Quick Contact */}
                         <a
@@ -1233,22 +1535,121 @@ export default function BookingManagement() {
                       <User className="w-3.5 h-3.5" />
                       {locale === 'id' ? 'Informasi Pelanggan' : 'Customer Info'}
                     </h4>
+                    {/* Customer Autocomplete Lookup */}
+                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 mb-4 space-y-3">
+                      <label className="text-xs font-bold text-toska-600 block uppercase tracking-wider">
+                        {locale === 'id' ? 'Cari Pelanggan Terdaftar' : 'Search Registered Customer'}
+                      </label>
+                      <div className="relative">
+                        <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          placeholder={locale === 'id' ? 'Ketik nama, no HP, atau email...' : 'Type name, phone, or email...'}
+                          value={custSearchQuery}
+                          onChange={e => handleCustomerSearch(e.target.value)}
+                          className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-toska-500 text-sm"
+                        />
+                      </div>
+
+                      {custSuggestions.length > 0 && (
+                        <div className="absolute z-50 w-[calc(100%-3rem)] mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-48 overflow-y-auto">
+                          {custSuggestions.map(cust => (
+                            <button
+                              key={cust.id}
+                              type="button"
+                              onClick={() => handleSelectCustomer(cust)}
+                              className="w-full text-left px-4 py-2.5 hover:bg-slate-50 border-b border-slate-100 last:border-0 flex items-center justify-between text-xs"
+                            >
+                              <div>
+                                <span className="font-semibold text-slate-800">{cust.full_name}</span>
+                                <span className="text-slate-400 block mt-0.5">{cust.phone} | {cust.email}</span>
+                              </div>
+                              {cust.identity_verification_status === 'VERIFIED' && (
+                                <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded text-[10px] font-bold">
+                                  VERIFIED
+                                </span>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {selectedCustVerificationStatus === 'VERIFIED' && (
+                        <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl flex items-center gap-2 text-xs font-semibold">
+                          <Check className="w-4 h-4 text-emerald-500 shrink-0" />
+                          <span>{locale === 'id' ? 'Identitas Pelanggan Terverifikasi (KTP/Paspor tidak perlu diupload)' : 'Customer Identity Verified (No upload needed)'}</span>
+                        </div>
+                      )}
+                    </div>
+
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {/* Kewarganegaraan */}
                       <div className="sm:col-span-2">
-                        <label className="text-xs font-medium text-slate-600 block mb-1.5">NIK (Nomor Induk Kependudukan) *</label>
+                        <label className="text-xs font-semibold text-slate-600 block mb-1.5">{locale === 'id' ? 'Kewarganegaraan' : 'Nationality'} *</label>
+                        <div className="flex gap-4">
+                          <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer">
+                            <input
+                              type="radio"
+                              name="modal_nationality"
+                              value="WNI"
+                              checked={addForm.nationality_type === 'WNI'}
+                              onChange={() => setAddForm(p => ({ ...p, nationality_type: 'WNI', identity_type: 'NIK', country_origin: '' }))}
+                              className="w-4 h-4 text-toska-500 focus:ring-toska-500"
+                            />
+                            WNI (Warga Negara Indonesia)
+                          </label>
+                          <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer">
+                            <input
+                              type="radio"
+                              name="modal_nationality"
+                              value="WNA"
+                              checked={addForm.nationality_type === 'WNA'}
+                              onChange={() => setAddForm(p => ({ ...p, nationality_type: 'WNA', identity_type: 'PASSPORT', country_origin: '' }))}
+                              className="w-4 h-4 text-toska-500 focus:ring-toska-500"
+                            />
+                            WNA (Warga Negara Asing / Foreigner)
+                          </label>
+                        </div>
+                      </div>
+
+                      {/* Nomor Identitas (NIK / Paspor) */}
+                      <div className="sm:col-span-2">
+                        <label className="text-xs font-medium text-slate-600 block mb-1.5">
+                          {addForm.nationality_type === 'WNI' ? 'NIK (16 Digit Angka)' : 'Nomor Paspor / Passport Number'} *
+                        </label>
                         <input
                           type="text"
                           required
-                          maxLength={16}
-                          value={addForm.nik}
+                          maxLength={addForm.nationality_type === 'WNI' ? 16 : 20}
+                          value={addForm.identity_number}
                           onChange={e => {
-                            const value = e.target.value.replace(/[^0-9]/g, '');
-                            setAddForm(p => ({ ...p, nik: value }));
+                            const value = addForm.nationality_type === 'WNI'
+                              ? e.target.value.replace(/[^0-9]/g, '')
+                              : e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+                            setAddForm(p => ({ ...p, identity_number: value, nik: value }));
                           }}
-                          placeholder="3171012345678901"
+                          placeholder={addForm.nationality_type === 'WNI' ? '3171012345678901' : 'A1234567'}
                           className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-toska-500 text-sm text-slate-800 placeholder-slate-400 font-mono"
                         />
                       </div>
+
+                      {/* Negara Asal (Only WNA) */}
+                      {addForm.nationality_type === 'WNA' && (
+                        <div className="sm:col-span-2">
+                          <label className="text-xs font-medium text-slate-600 block mb-1.5">{locale === 'id' ? 'Negara Asal' : 'Country of Origin'} *</label>
+                          <select
+                            required
+                            value={addForm.country_origin}
+                            onChange={e => setAddForm(p => ({ ...p, country_origin: e.target.value }))}
+                            className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-toska-500 text-sm text-slate-700 bg-white"
+                          >
+                            <option value="">— {locale === 'id' ? 'Pilih negara' : 'Select country'} —</option>
+                            {['Australia', 'Singapore', 'Malaysia', 'United States', 'United Kingdom', 'Japan', 'South Korea', 'Germany', 'France', 'China', 'India', 'Canada', 'Netherlands', 'Other'].map(country => (
+                              <option key={country} value={country}>{country}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
                       <div className="sm:col-span-2">
                         <label className="text-xs font-medium text-slate-600 block mb-1.5">{t('fullName')} *</label>
                         <input
@@ -1459,103 +1860,121 @@ export default function BookingManagement() {
                         />
                       </div>
                     </div>
-                  </div>
-
-                  {/* Document Upload Section */}
+                                  {/* Document Upload Section */}
                   <div className="space-y-4">
                     <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
                       <Upload className="w-3.5 h-3.5" />
                       {locale === 'id' ? 'Upload Dokumen Identitas' : 'Identity Document Upload'}
                     </h4>
 
-                    {/* KTP Upload */}
-                    <div>
-                      <label className="text-xs font-medium text-slate-600 block mb-1.5">
-                        {t('ktpPhoto')}
-                        <span className="ml-1 text-slate-400 font-normal">({locale === 'id' ? 'Wajib' : 'Required'})</span>
-                      </label>
-                      <p className="text-[11px] text-slate-400 mb-2">{t('ktpUploadHint')}</p>
-                      <div
-                        onClick={() => ktpInputRef.current?.click()}
-                        className="relative border-2 border-dashed border-slate-200 rounded-xl p-4 cursor-pointer hover:border-toska-400 hover:bg-toska-50/30 transition-all group"
-                      >
-                        <input
-                          ref={ktpInputRef}
-                          type="file"
-                          accept="image/jpeg,image/jpg,image/png,image/webp"
-                          onChange={e => handleFileChange(e, 'ktp')}
-                          className="hidden"
-                        />
-                        {ktpPreview ? (
-                          <div className="flex items-center gap-3">
-                            <img src={ktpPreview} alt="KTP Preview" className="w-20 h-14 object-cover rounded-lg border border-slate-200" />
-                            <div>
-                              <p className="text-sm font-semibold text-slate-800">{ktpFile?.name}</p>
-                              <p className="text-xs text-slate-500 mt-0.5">{ktpFile ? (ktpFile.size / 1024).toFixed(0) + ' KB' : ''}</p>
-                              <p className="text-[11px] text-toska-500 mt-1">{locale === 'id' ? 'Klik untuk ganti' : 'Click to change'}</p>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="flex flex-col items-center gap-2 py-2">
-                            <div className="w-10 h-10 bg-slate-100 group-hover:bg-toska-100 rounded-xl flex items-center justify-center transition-colors">
-                              <ImageIcon className="w-5 h-5 text-slate-400 group-hover:text-toska-500 transition-colors" />
-                            </div>
-                            <p className="text-sm text-slate-500 group-hover:text-toska-600 transition-colors">
-                              {locale === 'id' ? 'Klik untuk upload foto KTP' : 'Click to upload KTP photo'}
-                            </p>
-                          </div>
-                        )}
+                    {selectedCustVerificationStatus === 'VERIFIED' ? (
+                      <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl flex items-center gap-3 text-sm font-semibold">
+                        <Check className="w-5 h-5 text-emerald-500 shrink-0" />
+                        <div>
+                          <p>{locale === 'id' ? 'Identitas Terverifikasi' : 'Verified Customer Profile'}</p>
+                          <p className="text-xs text-emerald-600 font-normal mt-0.5">
+                            {locale === 'id' ? 'Profil pelanggan ini sudah terverifikasi. Tidak perlu mengupload ulang dokumen KTP/SIM/Paspor.' : 'This customer profile has already been verified. No document upload is required.'}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-
-                    {/* SIM Upload */}
-                    <div>
-                      <label className="text-xs font-medium text-slate-600 block mb-1.5">
-                        {t('simPhoto')}
-                        <span className="ml-1 text-slate-400 font-normal">
-                          {addForm.booking_type === 'car'
-                            ? `(${locale === 'id' ? 'Wajib untuk sewa mobil' : 'Required for car rental'})`
-                            : `(${locale === 'id' ? 'Opsional' : 'Optional'})`}
-                        </span>
-                      </label>
-                      <p className="text-[11px] text-slate-400 mb-2">{t('simUploadHint')}</p>
-                      <div
-                        onClick={() => simInputRef.current?.click()}
-                        className={`relative border-2 border-dashed rounded-xl p-4 cursor-pointer hover:border-toska-400 hover:bg-toska-50/30 transition-all group ${addForm.booking_type === 'car' ? 'border-amber-300 bg-amber-50/20' : 'border-slate-200'
-                          }`}
-                      >
-                        <input
-                          ref={simInputRef}
-                          type="file"
-                          accept="image/jpeg,image/jpg,image/png,image/webp"
-                          onChange={e => handleFileChange(e, 'sim')}
-                          className="hidden"
-                        />
-                        {simPreview ? (
-                          <div className="flex items-center gap-3">
-                            <img src={simPreview} alt="SIM Preview" className="w-20 h-14 object-cover rounded-lg border border-slate-200" />
-                            <div>
-                              <p className="text-sm font-semibold text-slate-800">{simFile?.name}</p>
-                              <p className="text-xs text-slate-500 mt-0.5">{simFile ? (simFile.size / 1024).toFixed(0) + ' KB' : ''}</p>
-                              <p className="text-[11px] text-toska-500 mt-1">{locale === 'id' ? 'Klik untuk ganti' : 'Click to change'}</p>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="flex flex-col items-center gap-2 py-2">
-                            <div className="w-10 h-10 bg-slate-100 group-hover:bg-toska-100 rounded-xl flex items-center justify-center transition-colors">
-                              <ImageIcon className="w-5 h-5 text-slate-400 group-hover:text-toska-500 transition-colors" />
-                            </div>
-                            <p className="text-sm text-slate-500 group-hover:text-toska-600 transition-colors">
-                              {locale === 'id' ? 'Klik untuk upload foto SIM' : 'Click to upload SIM/License photo'}
-                            </p>
-                            {addForm.booking_type === 'car' && (
-                              <p className="text-[11px] text-amber-600 font-medium">{locale === 'id' ? '⚠ Wajib untuk sewa mobil' : '⚠ Required for car rental'}</p>
+                    ) : (
+                      <div className="space-y-4">
+                        {/* Document 1: KTP/SIM or Passport */}
+                        <div>
+                          <label className="text-xs font-medium text-slate-600 block mb-1.5">
+                            {addForm.nationality_type === 'WNI'
+                              ? (locale === 'id' ? 'Foto KTP/SIM' : 'KTP/SIM Photo')
+                              : (locale === 'id' ? 'Foto Paspor' : 'Passport Photo')}
+                            <span className="ml-1 text-slate-400 font-normal">
+                              {addForm.nationality_type === 'WNA' || addForm.booking_type === 'car'
+                                ? `(${locale === 'id' ? 'Wajib' : 'Required'})`
+                                : `(${locale === 'id' ? 'Opsional' : 'Optional'})`}
+                            </span>
+                          </label>
+                          <p className="text-[11px] text-slate-400 mb-2">
+                            {addForm.nationality_type === 'WNI'
+                              ? (locale === 'id' ? 'Upload foto KTP atau SIM yang masih berlaku.' : 'Upload valid KTP or Driver License.')
+                              : (locale === 'id' ? 'Upload halaman foto Paspor yang terbaca jelas.' : 'Upload main photo page of Passport.')}
+                          </p>
+                          <div
+                            onClick={() => ktpInputRef.current?.click()}
+                            className="relative border-2 border-dashed border-slate-200 rounded-xl p-4 cursor-pointer hover:border-toska-400 hover:bg-toska-50/30 transition-all group"
+                          >
+                            <input
+                              ref={ktpInputRef}
+                              type="file"
+                              accept="image/jpeg,image/jpg,image/png,image/webp"
+                              onChange={e => handleFileChange(e, 'ktp')}
+                              className="hidden"
+                            />
+                            {ktpPreview ? (
+                              <div className="flex items-center gap-3">
+                                <img src={ktpPreview} alt="Preview" className="w-20 h-14 object-cover rounded-lg border border-slate-200" />
+                                <div>
+                                  <p className="text-sm font-semibold text-slate-800">{ktpFile?.name}</p>
+                                  <p className="text-xs text-slate-500 mt-0.5">{ktpFile ? (ktpFile.size / 1024).toFixed(0) + ' KB' : ''}</p>
+                                  <p className="text-[11px] text-toska-500 mt-1">{locale === 'id' ? 'Klik untuk ganti' : 'Click to change'}</p>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex flex-col items-center gap-2 py-2">
+                                <div className="w-10 h-10 bg-slate-100 group-hover:bg-toska-100 rounded-xl flex items-center justify-center transition-colors">
+                                  <ImageIcon className="w-5 h-5 text-slate-400 group-hover:text-toska-500 transition-colors" />
+                                </div>
+                                <p className="text-sm text-slate-500 group-hover:text-toska-600 transition-colors">
+                                  {addForm.nationality_type === 'WNI'
+                                    ? (locale === 'id' ? 'Klik untuk upload foto KTP/SIM' : 'Click to upload KTP/SIM photo')
+                                    : (locale === 'id' ? 'Klik untuk upload foto Paspor' : 'Click to upload Passport photo')}
+                                </p>
+                              </div>
                             )}
                           </div>
+                        </div>
+
+                        {/* Document 2: IDP (Only for WNA Car Rental) */}
+                        {addForm.nationality_type === 'WNA' && addForm.booking_type === 'car' && (
+                          <div>
+                            <label className="text-xs font-medium text-slate-600 block mb-1.5">
+                              International Driving Permit (IDP) *
+                              <span className="ml-1 text-amber-500 font-normal">({locale === 'id' ? 'Wajib untuk sewa mobil' : 'Required for car rental'})</span>
+                            </label>
+                            <p className="text-[11px] text-slate-400 mb-2">Upload foto halaman depan/identitas dari IDP Anda.</p>
+                            <div
+                              onClick={() => simInputRef.current?.click()}
+                              className="relative border-2 border-dashed border-amber-200 bg-amber-50/10 rounded-xl p-4 cursor-pointer hover:border-toska-400 hover:bg-toska-50/30 transition-all group"
+                            >
+                              <input
+                                ref={simInputRef}
+                                type="file"
+                                accept="image/jpeg,image/jpg,image/png,image/webp"
+                                onChange={e => handleFileChange(e, 'sim')}
+                                className="hidden"
+                              />
+                              {simPreview ? (
+                                <div className="flex items-center gap-3">
+                                  <img src={simPreview} alt="Preview" className="w-20 h-14 object-cover rounded-lg border border-slate-200" />
+                                  <div>
+                                    <p className="text-sm font-semibold text-slate-800">{simFile?.name}</p>
+                                    <p className="text-xs text-slate-500 mt-0.5">{simFile ? (simFile.size / 1024).toFixed(0) + ' KB' : ''}</p>
+                                    <p className="text-[11px] text-toska-500 mt-1">{locale === 'id' ? 'Klik untuk ganti' : 'Click to change'}</p>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="flex flex-col items-center gap-2 py-2">
+                                  <div className="w-10 h-10 bg-slate-100 group-hover:bg-toska-100 rounded-xl flex items-center justify-center transition-colors">
+                                    <ImageIcon className="w-5 h-5 text-slate-400 group-hover:text-toska-500 transition-colors" />
+                                  </div>
+                                  <p className="text-sm text-slate-500 group-hover:text-toska-600 transition-colors">
+                                    {locale === 'id' ? 'Klik untuk upload foto IDP' : 'Click to upload IDP photo'}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
                         )}
                       </div>
-                    </div>
-                  </div>
+                    )}
+                  </div>        </div>
                 </div>
 
                 {/* Footer Actions */}
@@ -1577,6 +1996,113 @@ export default function BookingManagement() {
                       <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> {t('uploadingDoc')}...</>
                     ) : (
                       <><Plus className="w-4 h-4" /> {t('addBooking')}</>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Reschedule Modal */}
+      <AnimatePresence>
+        {showRescheduleModal && rescheduleBooking && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              className="bg-white rounded-2xl w-full max-w-md border border-slate-200 shadow-2xl overflow-hidden flex flex-col"
+            >
+              <div className="px-6 py-5 bg-gradient-to-r from-slate-900 to-slate-800 text-white flex items-center justify-between">
+                <div>
+                  <h3 className="text-base font-bold flex items-center gap-2">
+                    <RefreshCw className="w-4 h-4 text-toska-400" />
+                    Reschedule Booking
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">Ubah tanggal pelaksanaan layanan pelanggan</p>
+                </div>
+                <button
+                  onClick={() => { setShowRescheduleModal(false); setRescheduleBooking(null); }}
+                  className="p-1.5 hover:bg-white/10 rounded-lg text-slate-300 hover:text-white transition-all"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleReschedule} className="p-6 space-y-4">
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 block mb-1.5">Nama Pelanggan</label>
+                  <input
+                    type="text"
+                    disabled
+                    value={rescheduleBooking.name}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-500 text-sm font-medium cursor-not-allowed"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 block mb-1.5">Layanan / Item</label>
+                  <input
+                    type="text"
+                    disabled
+                    value={rescheduleBooking.item_name}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-500 text-sm font-medium cursor-not-allowed"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 block mb-1.5">Tanggal Awal</label>
+                  <input
+                    type="text"
+                    disabled
+                    value={rescheduleBooking.original_booking_date || rescheduleBooking.date}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-500 text-sm font-medium cursor-not-allowed"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 block mb-1.5">Tanggal Baru *</label>
+                  <input
+                    type="date"
+                    required
+                    value={newRescheduleDate}
+                    onChange={e => setNewRescheduleDate(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-toska-500 text-sm text-slate-800"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 block mb-1.5">Alasan Reschedule *</label>
+                  <textarea
+                    required
+                    rows={3}
+                    value={rescheduleNotes}
+                    onChange={e => setRescheduleNotes(e.target.value)}
+                    placeholder="Tulis alasan reschedule..."
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-toska-500 text-sm text-slate-800 placeholder-slate-400 resize-none"
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => { setShowRescheduleModal(false); setRescheduleBooking(null); }}
+                    disabled={rescheduleLoading}
+                    className="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-100 transition-colors disabled:opacity-50"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={rescheduleLoading}
+                    className="px-5 py-2.5 rounded-xl bg-toska-500 hover:bg-toska-600 text-white text-sm font-semibold transition-colors flex items-center gap-2 disabled:opacity-60 shadow-sm shadow-toska-500/25"
+                  >
+                    {rescheduleLoading ? (
+                      <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Menyimpan...</>
+                    ) : (
+                      <>Simpan Tanggal Baru</>
                     )}
                   </button>
                 </div>

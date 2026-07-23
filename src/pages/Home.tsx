@@ -102,10 +102,28 @@ export default function Home() {
 
   // Booking form
   const [bookingForm, setBookingForm] = useState({
-    name: '', email: '', phone: '', item_name: '', booking_type: 'package', date: '', duration: '', notes: '', total_price: ''
+    name: '',
+    email: '',
+    phone: '',
+    nationality_type: 'WNI',
+    identity_type: 'NIK',
+    identity_number: '',
+    country_origin: '',
+    item_name: '',
+    booking_type: 'package',
+    date: '',
+    duration: '',
+    notes: '',
+    total_price: ''
   });
   const [bookingSuccess, setBookingSuccess] = useState(false);
   const [bookingLoading, setBookingLoading] = useState(false);
+  
+  // File upload states
+  const [ktpPassportFile, setKtpPassportFile] = useState<File | null>(null);
+  const [ktpPassportPreview, setKtpPassportPreview] = useState<string | null>(null);
+  const [simIdpFile, setSimIdpFile] = useState<File | null>(null);
+  const [simIdpPreview, setSimIdpPreview] = useState<string | null>(null);
 
   // Payment state
   const [paymentStep, setPaymentStep] = useState<PaymentStep>('closed');
@@ -141,6 +159,10 @@ export default function Home() {
         name: profile?.full_name || user?.user_metadata?.full_name || prev.name,
         email: profile?.email || user?.email || prev.email,
         phone: profile?.phone || prev.phone,
+        nationality_type: profile?.nationality_type || prev.nationality_type,
+        identity_type: profile?.identity_type || prev.identity_type,
+        identity_number: profile?.identity_number || prev.identity_number,
+        country_origin: profile?.country_origin || prev.country_origin,
       }));
     }
   }, [user, profile, isLoggedIn]);
@@ -262,32 +284,133 @@ export default function Home() {
     setSelectedPaxKey('');
   };
 
+  const uploadDoc = async (file: File, folder: string): Promise<string | null> => {
+    const ext = file.name.split('.').pop();
+    const path = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    const { error } = await supabase.storage
+      .from('booking-documents')
+      .upload(path, file, { contentType: file.type, upsert: false });
+    if (error) { console.error('Upload error:', error); return null; }
+    const { data } = supabase.storage.from('booking-documents').getPublicUrl(path);
+    return data.publicUrl;
+  };
+
   const handleBooking = async (e: React.FormEvent) => {
     e.preventDefault();
+    setBookingLoading(true);
 
     try {
-      setBookingLoading(true);
       const cleanPhone = bookingForm.phone.replace(/\D/g, '');
       const notesWithDetails = `Tipe: ${bookingForm.booking_type === 'package' ? 'Paket Wisata' : 'Sewa Mobil'}\nItem: ${bookingForm.item_name}\nJumlah/Durasi: ${bookingForm.duration}\nTanggal: ${bookingForm.date}\nHarga: ${bookingForm.total_price}\nCatatan: ${bookingForm.notes}`;
 
-      // Insert customer record
-      const { error: custErr } = await supabase.from('customers').insert({
-        full_name: bookingForm.name,
-        phone: cleanPhone,
-        email: bookingForm.email,
-        booking_status: 'booked',
-        notes: notesWithDetails
-      });
-      if (custErr) throw custErr;
+      // 1. Validation for uploads
+      const isVerified = profile?.identity_verification_status === 'VERIFIED';
+      if (!isVerified) {
+        if (bookingForm.nationality_type === 'WNI') {
+          if (bookingForm.booking_type === 'car' && !ktpPassportFile) {
+            alert(locale === 'id' ? 'Foto KTP/SIM wajib diunggah untuk sewa mobil!' : 'KTP/SIM photo is required for car rental!');
+            setBookingLoading(false);
+            return;
+          }
+        } else {
+          // WNA
+          if (!ktpPassportFile) {
+            alert(locale === 'id' ? 'Foto Paspor wajib diunggah!' : 'Passport photo is required!');
+            setBookingLoading(false);
+            return;
+          }
+          if (bookingForm.booking_type === 'car' && !simIdpFile) {
+            alert(locale === 'id' ? 'Foto International Driving Permit (IDP) wajib diunggah untuk sewa mobil!' : 'International Driving Permit (IDP) photo is required for car rental!');
+            setBookingLoading(false);
+            return;
+          }
+        }
+      }
 
-      // Insert booking record — get back the ID
+      // 2. Upload documents if needed
+      let ktpPassportUrl = profile?.ktp_sim_passport_url || null;
+      let simIdpUrl = null;
+
+      if (!isVerified) {
+        if (ktpPassportFile) {
+          const folder = bookingForm.nationality_type === 'WNI' ? 'ktp' : 'passport';
+          ktpPassportUrl = await uploadDoc(ktpPassportFile, folder);
+        }
+        if (simIdpFile) {
+          const folder = bookingForm.nationality_type === 'WNI' ? 'sim' : 'idp';
+          simIdpUrl = await uploadDoc(simIdpFile, folder);
+        }
+      }
+
+      // 3. Find or Create Customer
+      let customerId = null;
+      const { data: existingCust } = await supabase
+        .from('customers')
+        .select('id')
+        .or(`email.eq.${bookingForm.email},phone.eq.${cleanPhone}`)
+        .limit(1);
+
+      if (existingCust && existingCust.length > 0) {
+        customerId = existingCust[0].id;
+        await supabase.from('customers').update({
+          full_name: bookingForm.name,
+          phone: cleanPhone,
+          email: bookingForm.email,
+          nationality_type: bookingForm.nationality_type,
+          identity_type: bookingForm.identity_type,
+          identity_number: bookingForm.identity_number,
+          country_origin: bookingForm.country_origin || null,
+          ...(ktpPassportUrl ? { ktp_sim_passport_url: ktpPassportUrl } : {}),
+          user_id: user?.id || null,
+          updated_at: new Date().toISOString()
+        }).eq('id', customerId);
+      } else {
+        const { data: newCust, error: custErr } = await supabase
+          .from('customers')
+          .insert({
+            full_name: bookingForm.name,
+            phone: cleanPhone,
+            email: bookingForm.email,
+            nationality_type: bookingForm.nationality_type,
+            identity_type: bookingForm.identity_type,
+            identity_number: bookingForm.identity_number,
+            country_origin: bookingForm.country_origin || null,
+            ktp_sim_passport_url: ktpPassportUrl,
+            identity_verification_status: 'UNVERIFIED',
+            booking_status: 'booked',
+            user_id: user?.id || null,
+            notes: notesWithDetails
+          })
+          .select('id')
+          .single();
+        if (custErr) throw custErr;
+        customerId = newCust.id;
+      }
+
+      // 4. Create Snapshot
+      const snapshot = {
+        name: bookingForm.name,
+        email: bookingForm.email,
+        phone: cleanPhone,
+        nationality_type: bookingForm.nationality_type,
+        identity_type: bookingForm.identity_type,
+        identity_number: bookingForm.identity_number,
+        country_origin: bookingForm.country_origin || null,
+        ktp_sim_passport_url: ktpPassportUrl || null,
+        item_name: bookingForm.item_name,
+        total_price: bookingForm.total_price,
+      };
+
+      // 5. Insert Booking
       const { data: bookingData, error: bookingErr } = await supabase
         .from('bookings')
         .insert({
+          customer_id: customerId,
+          nik: bookingForm.nationality_type === 'WNI' ? bookingForm.identity_number : '',
           name: bookingForm.name,
           email: bookingForm.email,
           phone: cleanPhone,
-          booking_type: bookingForm.booking_type,
+          booking_type: bookingForm.booking_type === 'package' ? 'package' : 'car',
           item_name: bookingForm.item_name,
           date: bookingForm.date,
           duration: bookingForm.duration,
@@ -295,6 +418,9 @@ export default function Home() {
           total_price: bookingForm.total_price,
           status: 'pending',
           payment_status: 'unpaid',
+          ktp_url: ktpPassportUrl || null,
+          sim_url: simIdpUrl || null,
+          booking_details_snapshot: snapshot
         })
         .select('id')
         .single();
@@ -384,7 +510,25 @@ export default function Home() {
 
 
   const resetBookingForm = () => {
-    setBookingForm({ name: '', email: '', phone: '', item_name: '', booking_type: 'package', date: '', duration: '', notes: '', total_price: '' });
+    setBookingForm({
+      name: '',
+      email: '',
+      phone: '',
+      nationality_type: 'WNI',
+      identity_type: 'NIK',
+      identity_number: '',
+      country_origin: '',
+      item_name: '',
+      booking_type: 'package',
+      date: '',
+      duration: '',
+      notes: '',
+      total_price: ''
+    });
+    setKtpPassportFile(null);
+    setKtpPassportPreview(null);
+    setSimIdpFile(null);
+    setSimIdpPreview(null);
     setSelectedPkgId('');
     setSelectedHotelIdx(0);
     setSelectedPaxKey('');
@@ -886,6 +1030,157 @@ export default function Home() {
                       className="w-full px-4 py-3 rounded-xl border border-ocean-200 bg-white focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm"
                     />
                   </div>
+
+                  {/* Kewarganegaraan (WNI / WNA) */}
+                  <div className="sm:col-span-2">
+                    <label className="block text-sm font-medium text-ocean-800 mb-2">{locale === 'id' ? 'Kewarganegaraan' : 'Nationality'} *</label>
+                    <div className="flex gap-6 mt-2">
+                      <label className="flex items-center gap-2.5 text-sm text-ocean-700 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="nationality_type"
+                          value="WNI"
+                          checked={bookingForm.nationality_type === 'WNI'}
+                          onChange={() => {
+                            setBookingForm(p => ({
+                              ...p,
+                              nationality_type: 'WNI',
+                              identity_type: 'NIK',
+                              country_origin: ''
+                            }));
+                          }}
+                          className="w-4 h-4 text-toska-500 focus:ring-toska-500 border-ocean-200"
+                        />
+                        WNI (Warga Negara Indonesia)
+                      </label>
+                      <label className="flex items-center gap-2.5 text-sm text-ocean-700 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="nationality_type"
+                          value="WNA"
+                          checked={bookingForm.nationality_type === 'WNA'}
+                          onChange={() => {
+                            setBookingForm(p => ({
+                              ...p,
+                              nationality_type: 'WNA',
+                              identity_type: 'PASSPORT',
+                              country_origin: ''
+                            }));
+                          }}
+                          className="w-4 h-4 text-toska-500 focus:ring-toska-500 border-ocean-200"
+                        />
+                        WNA (Warga Negara Asing / Foreigner)
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* NIK / Nomor Paspor */}
+                  <div className="sm:col-span-2">
+                    <label className="block text-sm font-medium text-ocean-800 mb-2">
+                      {bookingForm.nationality_type === 'WNI' ? 'NIK (16 Digit Angka)' : 'Nomor Paspor / Passport Number'} *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      maxLength={bookingForm.nationality_type === 'WNI' ? 16 : 20}
+                      value={bookingForm.identity_number}
+                      onChange={e => {
+                        const val = bookingForm.nationality_type === 'WNI'
+                          ? e.target.value.replace(/[^0-9]/g, '')
+                          : e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+                        setBookingForm(p => ({ ...p, identity_number: val }));
+                      }}
+                      placeholder={bookingForm.nationality_type === 'WNI' ? 'Contoh: 3171012345678901' : 'e.g. A1234567'}
+                      className="w-full px-4 py-3 rounded-xl border border-ocean-200 bg-white focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm font-mono"
+                    />
+                  </div>
+
+                  {/* Negara Asal (Only WNA) */}
+                  {bookingForm.nationality_type === 'WNA' && (
+                    <div className="sm:col-span-2">
+                      <label className="block text-sm font-medium text-ocean-800 mb-2">
+                        {locale === 'id' ? 'Negara Asal' : 'Country of Origin'} *
+                      </label>
+                      <select
+                        required
+                        value={bookingForm.country_origin}
+                        onChange={e => setBookingForm(p => ({ ...p, country_origin: e.target.value }))}
+                        className="w-full px-4 py-3 rounded-xl border border-ocean-200 bg-white focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm text-slate-800"
+                      >
+                        <option value="">— {locale === 'id' ? 'Pilih negara' : 'Select country'} —</option>
+                        {['Australia', 'Singapore', 'Malaysia', 'United States', 'United Kingdom', 'Japan', 'South Korea', 'Germany', 'France', 'China', 'India', 'Canada', 'Netherlands', 'Other'].map(country => (
+                          <option key={country} value={country}>{country}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {/* Upload Document Section */}
+                  {profile?.identity_verification_status === 'VERIFIED' ? (
+                    <div className="sm:col-span-2 p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl flex items-center gap-3 text-sm font-medium">
+                      <UserCheck className="w-5 h-5 text-emerald-500 shrink-0" />
+                      <div>
+                        <p>{locale === 'id' ? 'Identitas Terverifikasi' : 'Identity Verified'}</p>
+                        <p className="text-xs text-emerald-600 font-normal mt-0.5">
+                          {locale === 'id'
+                            ? 'Dokumen identitas Anda telah diverifikasi oleh admin. Tidak perlu upload ulang.'
+                            : 'Your identity document has been verified by the admin. No re-upload needed.'}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Document 1: KTP/SIM or Passport */}
+                      <div>
+                        <label className="block text-sm font-medium text-ocean-800 mb-2">
+                          {bookingForm.nationality_type === 'WNI'
+                            ? (bookingForm.booking_type === 'car' ? 'Upload Foto KTP/SIM *' : 'Upload Foto KTP/SIM (Opsional)')
+                            : 'Upload Foto Paspor *'}
+                        </label>
+                        <input
+                          type="file"
+                          required={bookingForm.nationality_type === 'WNA' || bookingForm.booking_type === 'car'}
+                          accept="image/*"
+                          onChange={e => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              setKtpPassportFile(file);
+                              setKtpPassportPreview(URL.createObjectURL(file));
+                            }
+                          }}
+                          className="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-toska-50 file:text-toska-700 hover:file:bg-toska-100"
+                        />
+                        {ktpPassportPreview && (
+                          <img src={ktpPassportPreview} alt="Preview" className="mt-2 w-32 h-20 object-cover rounded-xl border border-ocean-100" />
+                        )}
+                      </div>
+
+                      {/* Document 2: International Driving Permit (Only WNA & Car Rental) */}
+                      {bookingForm.nationality_type === 'WNA' && bookingForm.booking_type === 'car' && (
+                        <div>
+                          <label className="block text-sm font-medium text-ocean-800 mb-2">
+                            Upload International Driving Permit (IDP) *
+                          </label>
+                          <input
+                            type="file"
+                            required
+                            accept="image/*"
+                            onChange={e => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                setSimIdpFile(file);
+                                setSimIdpPreview(URL.createObjectURL(file));
+                              }
+                            }}
+                            className="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-toska-50 file:text-toska-700 hover:file:bg-toska-100"
+                          />
+                          {simIdpPreview && (
+                            <img src={simIdpPreview} alt="Preview IDP" className="mt-2 w-32 h-20 object-cover rounded-xl border border-ocean-100" />
+                          )}
+                        </div>
+                      )}
+                    </>
+                  )}
 
                   {/* Tipe Booking */}
                   <div className="sm:col-span-2">

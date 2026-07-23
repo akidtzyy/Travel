@@ -147,7 +147,7 @@ export default async function handler(req, res) {
     try {
       getSupabaseClient()
         .from('bookings')
-        .update({ order_id, snap_token, payment_status: 'pending' })
+        .update({ order_id, snap_token, payment_status: 'pending', payment_link: redirect_url })
         .eq('id', booking_id)
         .then(({ error }) => {
           if (error) console.error('[Payment] Failed to save order_id to Supabase:', error.message);

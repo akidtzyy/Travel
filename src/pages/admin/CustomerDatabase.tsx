@@ -19,10 +19,19 @@ interface Customer {
   booking_status: string;
   notes: string;
   created_at: string;
+  nationality_type?: string;
+  identity_type?: string;
+  identity_number?: string;
+  country_origin?: string;
+  ktp_sim_passport_url?: string;
+  identity_verification_status?: string;
+  total_bookings?: number;
+  total_spent?: number;
+  last_booking_date?: string;
 }
 
 export default function CustomerDatabase() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -34,8 +43,18 @@ export default function CustomerDatabase() {
   const [editing, setEditing] = useState<Customer | null>(null);
   const [form, setForm] = useState({
     nik: '',
-    full_name: '', home_address: '', birth_date: '', phone: '', email: '',
-    booking_status: 'interested', notes: '',
+    full_name: '',
+    home_address: '',
+    birth_date: '',
+    phone: '',
+    email: '',
+    booking_status: 'interested',
+    notes: '',
+    nationality_type: 'WNI',
+    identity_type: 'NIK',
+    identity_number: '',
+    country_origin: '',
+    identity_verification_status: 'UNVERIFIED',
   });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
@@ -68,11 +87,24 @@ export default function CustomerDatabase() {
 
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {};
-    if (!form.nik.trim()) {
-      errors.nik = t('requiredField');
-    } else if (!/^[0-9]{16}$/.test(form.nik)) {
-      errors.nik = t('invalidPhone') === 'Nomor telepon tidak valid' ? 'NIK harus 16 digit angka' : 'NIK must be 16 digits';
+    if (form.nationality_type === 'WNI') {
+      if (!form.identity_number.trim()) {
+        errors.identity_number = t('requiredField');
+      } else if (!/^[0-9]{16}$/.test(form.identity_number)) {
+        errors.identity_number = 'NIK harus 16 digit angka';
+      }
+    } else {
+      // WNA
+      if (!form.identity_number.trim()) {
+        errors.identity_number = t('requiredField');
+      } else if (!/^[a-zA-Z0-9]+$/.test(form.identity_number)) {
+        errors.identity_number = 'Nomor paspor harus alfanumerik';
+      }
+      if (!form.country_origin.trim()) {
+        errors.country_origin = t('requiredField');
+      }
     }
+
     if (!form.full_name.trim()) errors.full_name = t('requiredField');
     if (!form.home_address.trim()) errors.home_address = t('requiredField');
     if (!form.birth_date) errors.birth_date = t('requiredField');
@@ -80,6 +112,7 @@ export default function CustomerDatabase() {
     else if (!/^[0-9]{8,15}$/.test(form.phone.replace(/\D/g, ''))) errors.phone = t('invalidPhone');
     if (!form.email.trim()) errors.email = t('requiredField');
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) errors.email = t('invalidEmail');
+    
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -89,7 +122,7 @@ export default function CustomerDatabase() {
     if (customer) {
       setEditing(customer);
       setForm({
-        nik: customer.nik || '',
+        nik: customer.identity_number || customer.nik || '',
         full_name: customer.full_name,
         home_address: customer.home_address,
         birth_date: customer.birth_date || '',
@@ -97,6 +130,11 @@ export default function CustomerDatabase() {
         email: customer.email,
         booking_status: customer.booking_status || 'interested',
         notes: customer.notes || '',
+        nationality_type: customer.nationality_type || 'WNI',
+        identity_type: customer.identity_type || 'NIK',
+        identity_number: customer.identity_number || customer.nik || '',
+        country_origin: customer.country_origin || '',
+        identity_verification_status: customer.identity_verification_status || 'UNVERIFIED',
       });
     } else {
       setEditing(null);
@@ -109,6 +147,11 @@ export default function CustomerDatabase() {
         email: '',
         booking_status: 'interested',
         notes: '',
+        nationality_type: 'WNI',
+        identity_type: 'NIK',
+        identity_number: '',
+        country_origin: '',
+        identity_verification_status: 'UNVERIFIED',
       });
     }
     setShowModal(true);
@@ -118,7 +161,7 @@ export default function CustomerDatabase() {
     if (!validateForm()) return;
 
     const data = {
-      nik: form.nik,
+      nik: form.nationality_type === 'WNI' ? form.identity_number : '',
       full_name: form.full_name,
       home_address: form.home_address,
       birth_date: form.birth_date,
@@ -126,6 +169,11 @@ export default function CustomerDatabase() {
       email: form.email,
       booking_status: form.booking_status,
       notes: form.notes,
+      nationality_type: form.nationality_type,
+      identity_type: form.identity_type,
+      identity_number: form.identity_number,
+      country_origin: form.country_origin || null,
+      identity_verification_status: form.identity_verification_status,
     };
 
     try {
@@ -192,10 +240,12 @@ export default function CustomerDatabase() {
 
   // Filter & paginate
   const filteredCustomers = customers.filter(c => {
-    const matchSearch = c.full_name.toLowerCase().includes(search.toLowerCase()) ||
-      c.email.toLowerCase().includes(search.toLowerCase()) ||
-      c.phone.includes(search) ||
-      (c.nik && c.nik.includes(search));
+    const searchStr = search.toLowerCase();
+    const matchSearch = c.full_name.toLowerCase().includes(searchStr) ||
+      c.email.toLowerCase().includes(searchStr) ||
+      c.phone.includes(searchStr) ||
+      (c.nik && c.nik.includes(searchStr)) ||
+      (c.identity_number && c.identity_number.toLowerCase().includes(searchStr));
     const matchStatus = statusFilter === 'all' || c.booking_status === statusFilter;
     return matchSearch && matchStatus;
   });
@@ -299,12 +349,11 @@ export default function CustomerDatabase() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50/50">
-                <th className="text-left px-6 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">NIK</th>
+                <th className="text-left px-6 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">{locale === 'id' ? 'Kewarganegaraan' : 'Nationality'}</th>
+                <th className="text-left px-6 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">{locale === 'id' ? 'Identitas (NIK/Paspor)' : 'Identity (NIK/Passport)'}</th>
                 <th className="text-left px-6 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">{t('fullName')}</th>
-                <th className="text-left px-6 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">{t('emailAddress')}</th>
-                <th className="text-left px-6 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">{t('phoneNumber')}</th>
-                <th className="text-left px-6 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wider hidden lg:table-cell">{t('homeAddress')}</th>
-                <th className="text-left px-6 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wider hidden md:table-cell">{t('birthDate')}</th>
+                <th className="text-left px-6 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">{locale === 'id' ? 'Kontak' : 'Contact'}</th>
+                <th className="text-left px-6 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">{locale === 'id' ? 'Statistik Booking' : 'Booking Stats'}</th>
                 <th className="text-left px-6 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">{t('status')}</th>
                 <th className="text-right px-6 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">{t('actions')}</th>
               </tr>
@@ -312,14 +361,31 @@ export default function CustomerDatabase() {
             <tbody className="divide-y divide-slate-50">
               {pagedCustomers.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="text-center py-12">
+                  <td colSpan={7} className="text-center py-12">
                     <Users className="w-12 h-12 mx-auto mb-3 text-slate-200" />
                     <p className="text-slate-400 text-sm">{t('noData')}</p>
                   </td>
                 </tr>
               ) : pagedCustomers.map((cust) => (
                 <tr key={cust.id} className="hover:bg-slate-50/50 transition-colors">
-                  <td className="px-6 py-4 text-sm font-semibold text-slate-700 font-mono">{cust.nik || '-'}</td>
+                  <td className="px-6 py-4 text-xs font-semibold text-slate-700">
+                    <span className={`inline-flex px-2 py-0.5 rounded-full ${cust.nationality_type === 'WNA' ? 'bg-indigo-50 text-indigo-700' : 'bg-teal-50 text-teal-700'}`}>
+                      {cust.nationality_type || 'WNI'}
+                      {cust.country_origin ? ` (${cust.country_origin})` : ''}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className="text-xs font-mono font-bold block text-slate-700">{cust.identity_number || cust.nik || '-'}</span>
+                    <span className={`inline-flex items-center gap-0.5 mt-1 px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                      cust.identity_verification_status === 'VERIFIED'
+                        ? 'bg-green-50 text-green-700'
+                        : cust.identity_verification_status === 'EXPIRED'
+                        ? 'bg-amber-50 text-amber-700'
+                        : 'bg-slate-100 text-slate-500'
+                    }`}>
+                      {cust.identity_verification_status || 'UNVERIFIED'}
+                    </span>
+                  </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
                       <div className="w-9 h-9 bg-gradient-to-br from-toska-400 to-toska-600 rounded-xl flex items-center justify-center text-white text-sm font-bold shrink-0">
@@ -333,11 +399,18 @@ export default function CustomerDatabase() {
                       </div>
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-sm text-slate-600">{cust.email}</td>
-                  <td className="px-6 py-4 text-sm text-slate-600">{cust.phone}</td>
-                  <td className="px-6 py-4 text-sm text-slate-600 hidden lg:table-cell max-w-[200px] truncate">{cust.home_address}</td>
-                  <td className="px-6 py-4 text-sm text-slate-600 hidden md:table-cell">
-                    {cust.birth_date ? new Date(cust.birth_date).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}
+                  <td className="px-6 py-4">
+                    <p className="text-xs text-slate-700 font-semibold">{cust.phone}</p>
+                    <p className="text-xs text-slate-400 mt-0.5">{cust.email}</p>
+                  </td>
+                  <td className="px-6 py-4 text-xs">
+                    <p className="text-slate-700 font-semibold">{cust.total_bookings || 0} Bookings</p>
+                    <p className="text-toska-600 font-semibold mt-0.5">Rp {(cust.total_spent || 0).toLocaleString('id-ID')}</p>
+                    {cust.last_booking_date && (
+                      <p className="text-[10px] text-slate-400 mt-0.5">
+                        Last: {new Date(cust.last_booking_date).toLocaleDateString(undefined, { day: '2-digit', month: 'short' })}
+                      </p>
+                    )}
                   </td>
                   <td className="px-6 py-4">
                     <span className={`inline-flex px-2.5 py-1 rounded-lg text-xs font-semibold border ${getStatusBadge(cust.booking_status)}`}>
@@ -407,29 +480,95 @@ export default function CustomerDatabase() {
                 </button>
               </div>
               <div className="p-6 space-y-4">
-                {/* NIK */}
+                {/* Kewarganegaraan */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">{locale === 'id' ? 'Kewarganegaraan' : 'Nationality'} *</label>
+                  <div className="flex gap-4 mt-2">
+                    <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="cust_nationality"
+                        value="WNI"
+                        checked={form.nationality_type === 'WNI'}
+                        onChange={() => setForm(p => ({ ...p, nationality_type: 'WNI', identity_type: 'NIK', country_origin: '', identity_number: '' }))}
+                        className="w-4 h-4 text-toska-500 focus:ring-toska-500"
+                      />
+                      WNI (Warga Negara Indonesia)
+                    </label>
+                    <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="cust_nationality"
+                        value="WNA"
+                        checked={form.nationality_type === 'WNA'}
+                        onChange={() => setForm(p => ({ ...p, nationality_type: 'WNA', identity_type: 'PASSPORT', country_origin: '', identity_number: '' }))}
+                        className="w-4 h-4 text-toska-500 focus:ring-toska-500"
+                      />
+                      WNA (Warga Negara Asing / Foreigner)
+                    </label>
+                  </div>
+                </div>
+
+                {/* Nomor Identitas */}
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                    NIK (Nomor Induk Kependudukan) <span className="text-red-500">*</span>
+                    {form.nationality_type === 'WNI' ? 'NIK (16 Digit Angka)' : 'Nomor Paspor / Passport Number'} <span className="text-red-500">*</span>
                   </label>
                   <div className="relative">
                     <FileText className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <input
                       type="text"
-                      maxLength={16}
-                      value={form.nik}
+                      maxLength={form.nationality_type === 'WNI' ? 16 : 20}
+                      value={form.identity_number}
                       onChange={e => {
-                        const value = e.target.value.replace(/[^0-9]/g, '');
-                        setForm(p => ({ ...p, nik: value }));
-                        setFormErrors(p => ({ ...p, nik: '' }));
+                        const value = form.nationality_type === 'WNI'
+                          ? e.target.value.replace(/[^0-9]/g, '')
+                          : e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+                        setForm(p => ({ ...p, identity_number: value, identity_number_err: '' }));
+                        setFormErrors(p => ({ ...p, identity_number: '' }));
                       }}
                       className={`w-full pl-10 pr-4 py-3 border rounded-xl text-sm focus:ring-2 focus:ring-toska-500/30 outline-none transition-all font-mono ${
-                        formErrors.nik ? 'border-red-300 focus:border-red-400' : 'border-slate-200 focus:border-toska-400'
+                        formErrors.identity_number ? 'border-red-300 focus:border-red-400' : 'border-slate-200 focus:border-toska-400'
                       }`}
-                      placeholder="3171012345678901"
+                      placeholder={form.nationality_type === 'WNI' ? '3171012345678901' : 'A1234567'}
                     />
                   </div>
-                  {formErrors.nik && <p className="text-xs text-red-500 mt-1">{formErrors.nik}</p>}
+                  {formErrors.identity_number && <p className="text-xs text-red-500 mt-1">{formErrors.identity_number}</p>}
+                </div>
+
+                {/* Negara Asal (Only WNA) */}
+                {form.nationality_type === 'WNA' && (
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1.5">{locale === 'id' ? 'Negara Asal' : 'Country of Origin'} *</label>
+                    <select
+                      required
+                      value={form.country_origin}
+                      onChange={e => { setForm(p => ({ ...p, country_origin: e.target.value })); setFormErrors(p => ({ ...p, country_origin: '' })); }}
+                      className={`w-full px-3.5 py-2.5 border rounded-xl text-sm focus:ring-2 focus:ring-toska-500/30 outline-none ${
+                        formErrors.country_origin ? 'border-red-300' : 'border-slate-200'
+                      }`}
+                    >
+                      <option value="">— {locale === 'id' ? 'Pilih negara' : 'Select country'} —</option>
+                      {['Australia', 'Singapore', 'Malaysia', 'United States', 'United Kingdom', 'Japan', 'South Korea', 'Germany', 'France', 'China', 'India', 'Canada', 'Netherlands', 'Other'].map(country => (
+                        <option key={country} value={country}>{country}</option>
+                      ))}
+                    </select>
+                    {formErrors.country_origin && <p className="text-xs text-red-500 mt-1">{formErrors.country_origin}</p>}
+                  </div>
+                )}
+
+                {/* Status Verifikasi Identitas */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">{locale === 'id' ? 'Status Verifikasi Identitas' : 'Identity Verification Status'} *</label>
+                  <select
+                    value={form.identity_verification_status}
+                    onChange={e => setForm(p => ({ ...p, identity_verification_status: e.target.value }))}
+                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-toska-500/30 outline-none text-slate-700 bg-white"
+                  >
+                    <option value="UNVERIFIED">UNVERIFIED</option>
+                    <option value="VERIFIED">VERIFIED</option>
+                    <option value="EXPIRED">EXPIRED</option>
+                  </select>
                 </div>
 
                 {/* Full Name */}

@@ -57,12 +57,59 @@ export default async function handler(req, res) {
       .from('bookings')
       .update(updatePayload)
       .eq('id', booking_id)
-      .select('id, name, payment_status, status')
+      .select('id, name, payment_status, status, customer_id, total_price')
       .single();
 
     if (error) {
       console.error('[payment-status] DB update failed:', error.message);
       return res.status(500).json({ error: 'Failed to update booking status' });
+    }
+
+    // Update Customer statistics if transaction is PAID
+    if (data && payment_status === 'paid') {
+      try {
+        const customerId = data.customer_id;
+        const priceStr = data.total_price || '0';
+        if (customerId) {
+          const cleanedPrice = parseInt(priceStr.replace(/[^0-9]/g, ''), 10) || 0;
+          
+          const { data: cust } = await supabase
+            .from('customers')
+            .select('total_bookings, total_spent, user_id')
+            .eq('id', customerId)
+            .single();
+          
+          if (cust) {
+            const newTotalBookings = (cust.total_bookings || 0) + 1;
+            const newTotalSpent = (cust.total_spent || 0) + cleanedPrice;
+            const lastBookingDate = new Date().toISOString();
+            
+            await supabase
+              .from('customers')
+              .update({
+                total_bookings: newTotalBookings,
+                total_spent: newTotalSpent,
+                last_booking_date: lastBookingDate
+              })
+              .eq('id', customerId);
+            
+            console.log(`[payment-status Stats] Updated customer stats: total_bookings=${newTotalBookings}, total_spent=${newTotalSpent}`);
+
+            if (cust.user_id) {
+              await supabase
+                .from('profiles')
+                .update({
+                  total_bookings: newTotalBookings,
+                  total_spent: newTotalSpent,
+                  last_booking_date: lastBookingDate
+                })
+                .eq('id', cust.user_id);
+            }
+          }
+        }
+      } catch (statsErr) {
+        console.error('[payment-status Stats] Error updating customer stats:', statsErr.message);
+      }
     }
 
     console.log(`[payment-status] ✅ Booking #${data?.id} → payment_status=${data?.payment_status}, status=${data?.status}`);

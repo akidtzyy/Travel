@@ -147,7 +147,7 @@ export default async function handler(req, res) {
         .from('bookings')
         .update({ ...updatePayload, order_id })  // also save order_id for future lookups
         .eq('id', numericBookingId)
-        .select('id, name, payment_status, status')
+        .select('id, name, payment_status, status, customer_id, total_price')
         .single();
       updated = result.data;
       updateErr = result.error;
@@ -160,7 +160,7 @@ export default async function handler(req, res) {
         .from('bookings')
         .update(updatePayload)
         .eq('order_id', order_id)
-        .select('id, name, payment_status, status')
+        .select('id, name, payment_status, status, customer_id, total_price')
         .maybeSingle();
       updated = result.data;
       updateErr = result.error;
@@ -175,6 +175,53 @@ export default async function handler(req, res) {
     if (!updated) {
       console.warn(`[Midtrans Webhook] ⚠️ No booking found for order_id=${order_id}`);
       return res.status(200).json({ message: 'Booking not found, ignored' });
+    }
+
+    // Update Customer statistics if transaction is PAID
+    if (updated && payment_status === 'paid') {
+      try {
+        const customerId = updated.customer_id;
+        const priceStr = updated.total_price || '0';
+        if (customerId) {
+          const cleanedPrice = parseInt(priceStr.replace(/[^0-9]/g, ''), 10) || 0;
+          
+          const { data: cust } = await supabase
+            .from('customers')
+            .select('total_bookings, total_spent, user_id')
+            .eq('id', customerId)
+            .single();
+          
+          if (cust) {
+            const newTotalBookings = (cust.total_bookings || 0) + 1;
+            const newTotalSpent = (cust.total_spent || 0) + cleanedPrice;
+            const lastBookingDate = new Date().toISOString();
+            
+            await supabase
+              .from('customers')
+              .update({
+                total_bookings: newTotalBookings,
+                total_spent: newTotalSpent,
+                last_booking_date: lastBookingDate
+              })
+              .eq('id', customerId);
+            
+            console.log(`[Midtrans Webhook Stats] Updated customer stats: total_bookings=${newTotalBookings}, total_spent=${newTotalSpent}`);
+
+            if (cust.user_id) {
+              await supabase
+                .from('profiles')
+                .update({
+                  total_bookings: newTotalBookings,
+                  total_spent: newTotalSpent,
+                  last_booking_date: lastBookingDate
+                })
+                .eq('id', cust.user_id);
+            }
+          }
+        }
+      } catch (statsErr) {
+        console.error('[Midtrans Webhook Stats] Error updating customer stats:', statsErr.message);
+      }
     }
 
     console.log(`[Midtrans Webhook] ✅ Updated booking #${updated?.id} (${updated?.name}) → payment_status=${updated?.payment_status}, status=${updated?.status}`);
