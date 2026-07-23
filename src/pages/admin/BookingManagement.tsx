@@ -11,6 +11,7 @@ import supabase from '../../lib/supabase';
 
 interface Booking {
   id: number;
+  nik: string;
   name: string;
   email: string;
   phone: string;
@@ -32,6 +33,7 @@ interface Booking {
 }
 
 interface AddBookingForm {
+  nik: string;
   name: string;
   email: string;
   phone: string;
@@ -81,6 +83,7 @@ export default function BookingManagement() {
   const ktpInputRef = useRef<HTMLInputElement>(null);
   const simInputRef = useRef<HTMLInputElement>(null);
   const [addForm, setAddForm] = useState<AddBookingForm>({
+    nik: '',
     name: '',
     email: '',
     phone: '',
@@ -294,7 +297,7 @@ export default function BookingManagement() {
   };
 
   const resetAddForm = () => {
-    setAddForm({ name: '', email: '', phone: '', booking_type: 'package', item_name: '', date: '', duration: '', notes: '', total_price: '', status: 'pending' });
+    setAddForm({ nik: '', name: '', email: '', phone: '', booking_type: 'package', item_name: '', date: '', duration: '', notes: '', total_price: '', status: 'pending' });
     setKtpFile(null); setSimFile(null); setKtpPreview(null); setSimPreview(null);
     setSelectedPkgId(''); setSelectedHotelIdx(''); setSelectedPaxKey('');
     setSelectedCarId(''); setSelectedCarType('self_drive');
@@ -404,6 +407,7 @@ export default function BookingManagement() {
       b.email.toLowerCase().includes(searchStr) ||
       b.phone.includes(searchStr) ||
       b.item_name.toLowerCase().includes(searchStr) ||
+      (b.nik && b.nik.toLowerCase().includes(searchStr)) ||
       `#${b.id}`.includes(searchStr);
 
     const matchStatus = statusFilter === 'all' || b.status === statusFilter;
@@ -430,9 +434,9 @@ export default function BookingManagement() {
   };
 
   const exportCSV = () => {
-    const headers = ['ID', 'Nama', 'Email', 'HP', 'Tipe', 'Item', 'Tanggal', 'Durasi', 'Harga', 'Status', 'Status Bayar', 'Dibuat'];
+    const headers = ['ID', 'NIK', 'Nama', 'Email', 'HP', 'Tipe', 'Item', 'Tanggal', 'Durasi', 'Harga', 'Status', 'Status Bayar', 'Dibuat'];
     const rows = filteredBookings.map(b => [
-      b.id, `"${b.name}"`, b.email, b.phone,
+      b.id, b.nik || '', `"${b.name}"`, b.email, b.phone,
       b.booking_type, `"${b.item_name}"`, b.date, b.duration,
       `"${b.total_price}"`, b.status, b.payment_status || 'unpaid', b.created_at?.slice(0, 10) || ''
     ]);
@@ -650,6 +654,7 @@ export default function BookingManagement() {
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 text-[11px] font-semibold uppercase tracking-wider">
                 <th className="px-6 py-4">{t('bookingId')}</th>
+                <th className="px-6 py-4">NIK</th>
                 <th className="px-6 py-4">{locale === 'id' ? 'Pelanggan' : 'Customer'}</th>
                 <th className="px-6 py-4">{t('bookingType')}</th>
                 <th className="px-6 py-4">{locale === 'id' ? 'Nama Item' : 'Item Name'}</th>
@@ -666,6 +671,7 @@ export default function BookingManagement() {
                 pagedBookings.map((b) => (
                   <tr key={b.id} className="hover:bg-slate-50/50 transition-colors">
                     <td className="px-6 py-4.5 font-semibold text-slate-900">#{b.id}</td>
+                    <td className="px-6 py-4.5 text-sm font-semibold text-slate-700 font-mono">{b.nik || '-'}</td>
                     <td className="px-6 py-4.5">
                       <div>
                         <p className="font-semibold text-slate-800 leading-tight">{b.name}</p>
@@ -765,7 +771,7 @@ export default function BookingManagement() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={10} className="px-6 py-12 text-center text-slate-400">
+                  <td colSpan={11} className="px-6 py-12 text-center text-slate-400">
                     <CalendarCheck className="w-10 h-10 text-slate-300 mx-auto mb-3" />
                     <p>{t('noData')}</p>
                   </td>
@@ -1228,6 +1234,21 @@ export default function BookingManagement() {
                       {locale === 'id' ? 'Informasi Pelanggan' : 'Customer Info'}
                     </h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="sm:col-span-2">
+                        <label className="text-xs font-medium text-slate-600 block mb-1.5">NIK (Nomor Induk Kependudukan) *</label>
+                        <input
+                          type="text"
+                          required
+                          maxLength={16}
+                          value={addForm.nik}
+                          onChange={e => {
+                            const value = e.target.value.replace(/[^0-9]/g, '');
+                            setAddForm(p => ({ ...p, nik: value }));
+                          }}
+                          placeholder="3171012345678901"
+                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-toska-500 text-sm text-slate-800 placeholder-slate-400 font-mono"
+                        />
+                      </div>
                       <div className="sm:col-span-2">
                         <label className="text-xs font-medium text-slate-600 block mb-1.5">{t('fullName')} *</label>
                         <input

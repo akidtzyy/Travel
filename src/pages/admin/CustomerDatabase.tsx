@@ -10,6 +10,7 @@ import supabase from '../../lib/supabase';
 
 interface Customer {
   id: number;
+  nik: string;
   full_name: string;
   home_address: string;
   birth_date: string;
@@ -32,6 +33,7 @@ export default function CustomerDatabase() {
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<Customer | null>(null);
   const [form, setForm] = useState({
+    nik: '',
     full_name: '', home_address: '', birth_date: '', phone: '', email: '',
     booking_status: 'interested', notes: '',
   });
@@ -66,6 +68,11 @@ export default function CustomerDatabase() {
 
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {};
+    if (!form.nik.trim()) {
+      errors.nik = t('requiredField');
+    } else if (!/^[0-9]{16}$/.test(form.nik)) {
+      errors.nik = t('invalidPhone') === 'Nomor telepon tidak valid' ? 'NIK harus 16 digit angka' : 'NIK must be 16 digits';
+    }
     if (!form.full_name.trim()) errors.full_name = t('requiredField');
     if (!form.home_address.trim()) errors.home_address = t('requiredField');
     if (!form.birth_date) errors.birth_date = t('requiredField');
@@ -82,14 +89,27 @@ export default function CustomerDatabase() {
     if (customer) {
       setEditing(customer);
       setForm({
-        full_name: customer.full_name, home_address: customer.home_address,
-        birth_date: customer.birth_date || '', phone: customer.phone,
-        email: customer.email, booking_status: customer.booking_status || 'interested',
+        nik: customer.nik || '',
+        full_name: customer.full_name,
+        home_address: customer.home_address,
+        birth_date: customer.birth_date || '',
+        phone: customer.phone,
+        email: customer.email,
+        booking_status: customer.booking_status || 'interested',
         notes: customer.notes || '',
       });
     } else {
       setEditing(null);
-      setForm({ full_name: '', home_address: '', birth_date: '', phone: '', email: '', booking_status: 'interested', notes: '' });
+      setForm({
+        nik: '',
+        full_name: '',
+        home_address: '',
+        birth_date: '',
+        phone: '',
+        email: '',
+        booking_status: 'interested',
+        notes: '',
+      });
     }
     setShowModal(true);
   };
@@ -98,6 +118,7 @@ export default function CustomerDatabase() {
     if (!validateForm()) return;
 
     const data = {
+      nik: form.nik,
       full_name: form.full_name,
       home_address: form.home_address,
       birth_date: form.birth_date,
@@ -137,9 +158,9 @@ export default function CustomerDatabase() {
   };
 
   const exportCSV = () => {
-    const headers = ['ID', t('fullName'), t('emailAddress'), t('phoneNumber'), t('homeAddress'), t('birthDate'), t('bookingStatus'), t('notes'), t('registeredAt')];
+    const headers = ['ID', 'NIK', t('fullName'), t('emailAddress'), t('phoneNumber'), t('homeAddress'), t('birthDate'), t('bookingStatus'), t('notes'), t('registeredAt')];
     const rows = filteredCustomers.map(c => [
-      c.id, c.full_name, c.email, c.phone, `"${c.home_address}"`, c.birth_date, c.booking_status, `"${c.notes || ''}"`, c.created_at,
+      c.id, c.nik || '', c.full_name, c.email, c.phone, `"${c.home_address}"`, c.birth_date, c.booking_status, `"${c.notes || ''}"`, c.created_at,
     ]);
     const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -173,7 +194,8 @@ export default function CustomerDatabase() {
   const filteredCustomers = customers.filter(c => {
     const matchSearch = c.full_name.toLowerCase().includes(search.toLowerCase()) ||
       c.email.toLowerCase().includes(search.toLowerCase()) ||
-      c.phone.includes(search);
+      c.phone.includes(search) ||
+      (c.nik && c.nik.includes(search));
     const matchStatus = statusFilter === 'all' || c.booking_status === statusFilter;
     return matchSearch && matchStatus;
   });
@@ -277,6 +299,7 @@ export default function CustomerDatabase() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50/50">
+                <th className="text-left px-6 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">NIK</th>
                 <th className="text-left px-6 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">{t('fullName')}</th>
                 <th className="text-left px-6 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">{t('emailAddress')}</th>
                 <th className="text-left px-6 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">{t('phoneNumber')}</th>
@@ -289,13 +312,14 @@ export default function CustomerDatabase() {
             <tbody className="divide-y divide-slate-50">
               {pagedCustomers.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-12">
+                  <td colSpan={8} className="text-center py-12">
                     <Users className="w-12 h-12 mx-auto mb-3 text-slate-200" />
                     <p className="text-slate-400 text-sm">{t('noData')}</p>
                   </td>
                 </tr>
               ) : pagedCustomers.map((cust) => (
                 <tr key={cust.id} className="hover:bg-slate-50/50 transition-colors">
+                  <td className="px-6 py-4 text-sm font-semibold text-slate-700 font-mono">{cust.nik || '-'}</td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
                       <div className="w-9 h-9 bg-gradient-to-br from-toska-400 to-toska-600 rounded-xl flex items-center justify-center text-white text-sm font-bold shrink-0">
@@ -383,6 +407,31 @@ export default function CustomerDatabase() {
                 </button>
               </div>
               <div className="p-6 space-y-4">
+                {/* NIK */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                    NIK (Nomor Induk Kependudukan) <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <FileText className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                      type="text"
+                      maxLength={16}
+                      value={form.nik}
+                      onChange={e => {
+                        const value = e.target.value.replace(/[^0-9]/g, '');
+                        setForm(p => ({ ...p, nik: value }));
+                        setFormErrors(p => ({ ...p, nik: '' }));
+                      }}
+                      className={`w-full pl-10 pr-4 py-3 border rounded-xl text-sm focus:ring-2 focus:ring-toska-500/30 outline-none transition-all font-mono ${
+                        formErrors.nik ? 'border-red-300 focus:border-red-400' : 'border-slate-200 focus:border-toska-400'
+                      }`}
+                      placeholder="3171012345678901"
+                    />
+                  </div>
+                  {formErrors.nik && <p className="text-xs text-red-500 mt-1">{formErrors.nik}</p>}
+                </div>
+
                 {/* Full Name */}
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">
