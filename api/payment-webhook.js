@@ -1,5 +1,23 @@
 import crypto from 'crypto';
-import supabase from './db-client.js';
+import { createClient } from '@supabase/supabase-js';
+
+/**
+ * Create Supabase admin client directly inside the function
+ * so it always reads env vars at request time, not module load time.
+ * Falls back to anon key if service role key is not set.
+ */
+function getSupabaseClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+    || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    || process.env.VITE_SUPABASE_ANON_KEY;
+
+  if (!url || !key) {
+    throw new Error(`supabaseUrl is required. NEXT_PUBLIC_SUPABASE_URL=${url}, key=${!!key}`);
+  }
+
+  return createClient(url, key, { auth: { persistSession: false } });
+}
 
 /**
  * Verify Midtrans signature key
@@ -27,26 +45,26 @@ function mapPaymentStatus(transactionStatus, fraudStatus) {
 }
 
 export default async function handler(req, res) {
-  // Always return 200 to prevent Midtrans retries on our errors
-  // Midtrans will retry if it gets 5xx or 4xx
-
+  // Always return 200 to Midtrans — it retries on non-200 responses
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // Read server key at request time (not module load time)
-  // This ensures it's available even if loaded lazily
   const MIDTRANS_SERVER_KEY = process.env.MIDTRANS_SERVER_KEY;
 
   try {
     const body = req.body;
 
-    // Log incoming webhook for debugging
+    // Detailed log for debugging in Vercel Functions tab
     console.log('[Midtrans Webhook] Received:', JSON.stringify({
       order_id: body?.order_id,
       transaction_status: body?.transaction_status,
+      fraud_status: body?.fraud_status,
       status_code: body?.status_code,
+      gross_amount: body?.gross_amount,
       has_server_key: !!MIDTRANS_SERVER_KEY,
+      has_supabase_url: !!(process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.VITE_SUPABASE_URL),
+      has_service_role: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
     }));
 
     const {
@@ -61,20 +79,20 @@ export default async function handler(req, res) {
     } = body || {};
 
     if (!order_id || !transaction_status) {
-      console.warn('[Midtrans Webhook] Missing required fields');
+      console.warn('[Midtrans Webhook] Missing required fields in body');
       return res.status(200).json({ message: 'Missing fields, ignored' });
     }
 
-    // Verify signature — skip if server key not configured (dev/test mode)
+    // Verify signature
     if (MIDTRANS_SERVER_KEY && signature_key) {
       const valid = verifySignature(order_id, status_code, gross_amount, signature_key, MIDTRANS_SERVER_KEY);
       if (!valid) {
-        console.warn('[Midtrans Webhook] Invalid signature for order:', order_id);
-        // Return 200 so Midtrans doesn't retry, but log the rejection
+        console.warn('[Midtrans Webhook] ❌ Invalid signature for order:', order_id);
         return res.status(200).json({ message: 'Invalid signature, ignored' });
       }
+      console.log('[Midtrans Webhook] ✅ Signature verified for order:', order_id);
     } else if (!MIDTRANS_SERVER_KEY) {
-      console.warn('[Midtrans Webhook] MIDTRANS_SERVER_KEY not set — skipping signature check');
+      console.warn('[Midtrans Webhook] ⚠️ MIDTRANS_SERVER_KEY not set — skipping signature check');
     }
 
     const payment_status = mapPaymentStatus(transaction_status, fraud_status);
@@ -82,32 +100,72 @@ export default async function handler(req, res) {
       ? (transaction_time ? new Date(transaction_time).toISOString() : new Date().toISOString())
       : null;
 
-    console.log(`[Midtrans Webhook] ${order_id} → ${transaction_status} → ${payment_status}`);
+    console.log(`[Midtrans Webhook] Mapping: transaction_status=${transaction_status}, fraud_status=${fraud_status} → payment_status=${payment_status}`);
 
-    // Update booking in Supabase
-    const { data, error } = await supabase
-      .from('bookings')
-      .update({
-        payment_status,
-        payment_type: payment_type || null,
-        paid_at,
-        ...(payment_status === 'paid' ? { status: 'confirmed' } : {}),
-      })
-      .eq('order_id', order_id)
-      .select('id, name, email, item_name')
-      .single();
+    // Build update payload
+    const updatePayload = {
+      payment_status,
+      payment_type: payment_type || null,
+      paid_at,
+    };
 
-    if (error) {
-      console.error('[Midtrans Webhook] Supabase update failed:', error.message, '| order_id:', order_id);
-      // Still return 200 to prevent Midtrans retries
-      return res.status(200).json({ message: 'DB error logged, will not retry' });
+    // Auto-confirm booking when payment is successful
+    if (payment_status === 'paid') {
+      updatePayload.status = 'confirmed';
+    } else if (payment_status === 'failed' || payment_status === 'expired') {
+      updatePayload.status = 'cancelled';
     }
 
-    console.log(`[Midtrans Webhook] ✅ Updated booking #${data?.id} (${data?.name}) → ${payment_status}`);
-    return res.status(200).json({ message: 'OK', payment_status, booking_id: data?.id });
+    // Create Supabase client at request time
+    let supabase;
+    try {
+      supabase = getSupabaseClient();
+    } catch (clientErr) {
+      console.error('[Midtrans Webhook] ❌ Cannot create Supabase client:', clientErr.message);
+      return res.status(200).json({ message: 'DB config error logged' });
+    }
+
+    // Find booking by order_id
+    const { data: booking, error: findErr } = await supabase
+      .from('bookings')
+      .select('id, name, email, payment_status')
+      .eq('order_id', order_id)
+      .maybeSingle();
+
+    if (findErr) {
+      console.error('[Midtrans Webhook] ❌ Error finding booking:', findErr.message, '| order_id:', order_id);
+      return res.status(200).json({ message: 'DB find error logged' });
+    }
+
+    if (!booking) {
+      console.warn('[Midtrans Webhook] ⚠️ No booking found with order_id:', order_id);
+      return res.status(200).json({ message: 'Booking not found, ignored' });
+    }
+
+    console.log(`[Midtrans Webhook] Found booking #${booking.id} (${booking.name}), current payment_status: ${booking.payment_status}`);
+
+    // Update booking
+    const { data: updated, error: updateErr } = await supabase
+      .from('bookings')
+      .update(updatePayload)
+      .eq('order_id', order_id)
+      .select('id, name, payment_status, status')
+      .single();
+
+    if (updateErr) {
+      console.error('[Midtrans Webhook] ❌ Supabase update failed:', updateErr.message, '| order_id:', order_id);
+      return res.status(200).json({ message: 'DB update error logged' });
+    }
+
+    console.log(`[Midtrans Webhook] ✅ Updated booking #${updated?.id} → payment_status=${updated?.payment_status}, status=${updated?.status}`);
+    return res.status(200).json({
+      message: 'OK',
+      payment_status: updated?.payment_status,
+      booking_id: updated?.id,
+    });
 
   } catch (err) {
-    console.error('[Midtrans Webhook] Unexpected error:', err.message);
+    console.error('[Midtrans Webhook] ❌ Unexpected error:', err.message, err.stack);
     return res.status(200).json({ message: 'Error logged' });
   }
 }

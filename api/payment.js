@@ -1,4 +1,13 @@
-import supabase from './db-client.js';
+import { createClient } from '@supabase/supabase-js';
+
+function getSupabaseClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+    || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    || process.env.VITE_SUPABASE_ANON_KEY;
+  if (!url || !key) throw new Error(`supabaseUrl is required. url=${url}`);
+  return createClient(url, key, { auth: { persistSession: false } });
+}
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -47,7 +56,7 @@ export default async function handler(req, res) {
     if (!customerName || !customerEmail || !totalPrice) {
       // Try fetching from Supabase as fallback
       console.log('[Payment] Fetching booking from Supabase, id:', booking_id);
-      const { data: booking, error: fetchErr } = await supabase
+      const { data: booking, error: fetchErr } = await getSupabaseClient()
         .from('bookings')
         .select('*')
         .eq('id', booking_id)
@@ -135,13 +144,17 @@ export default async function handler(req, res) {
     console.log(`[Payment] Snap token generated for order ${order_id}`);
 
     // Save order_id and snap_token to Supabase (best-effort, don't block)
-    supabase
-      .from('bookings')
-      .update({ order_id, snap_token, payment_status: 'pending' })
-      .eq('id', booking_id)
-      .then(({ error }) => {
-        if (error) console.error('[Payment] Failed to save order_id to Supabase:', error.message);
-      });
+    try {
+      getSupabaseClient()
+        .from('bookings')
+        .update({ order_id, snap_token, payment_status: 'pending' })
+        .eq('id', booking_id)
+        .then(({ error }) => {
+          if (error) console.error('[Payment] Failed to save order_id to Supabase:', error.message);
+        });
+    } catch (e) {
+      console.warn('[Payment] Could not save snap token to DB:', e.message);
+    }
 
     return res.status(200).json({ snap_token, redirect_url, order_id });
 
