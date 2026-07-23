@@ -20,9 +20,14 @@ interface Booking {
   duration: string;
   notes: string;
   total_price: string;
+  // Booking status = admin approval of document completeness
   status: 'pending' | 'confirmed' | 'paid' | 'completed' | 'cancelled';
+  // Payment status = auto-updated by Midtrans webhook
+  payment_status: 'unpaid' | 'pending' | 'paid' | 'failed' | 'expired' | 'challenge';
   ktp_url: string | null;
   sim_url: string | null;
+  order_id: string | null;
+  paid_at: string | null;
   created_at: string;
 }
 
@@ -231,14 +236,9 @@ export default function BookingManagement() {
         setSelectedBooking(prev => prev ? { ...prev, status: value as any } : null);
       }
 
-      const updates: any = { status: value };
-      if (value === 'paid' || value === 'completed') {
-        updates.payment_status = 'paid';
-      } else {
-        updates.payment_status = 'unpaid';
-      }
-
-      const { error } = await supabase.from('bookings').update(updates).eq('id', id);
+      // Only update booking status (admin doc approval)
+      // DO NOT touch payment_status — that is managed by Midtrans webhook
+      const { error } = await supabase.from('bookings').update({ status: value }).eq('id', id);
       if (error) throw error;
 
       showToast('success', t('bookingSaved'));
@@ -371,24 +371,29 @@ export default function BookingManagement() {
     return labels[status] || status;
   };
 
-  const getPaymentStatusBadge = (status: string) => {
+  const getPaymentStatusBadge = (paymentStatus: string) => {
     const badges: Record<string, string> = {
       unpaid: 'bg-red-50 text-red-600 border border-red-200',
+      pending: 'bg-amber-50 text-amber-600 border border-amber-200',
       paid: 'bg-emerald-50 text-emerald-600 border border-emerald-200',
+      failed: 'bg-red-50 text-red-700 border border-red-200',
+      expired: 'bg-slate-50 text-slate-500 border border-slate-200',
+      challenge: 'bg-orange-50 text-orange-600 border border-orange-200',
     };
-    return badges[status] || 'bg-slate-50 text-slate-600 border border-slate-200';
+    return badges[paymentStatus] || 'bg-slate-50 text-slate-600 border border-slate-200';
   };
 
-  const getPaymentStatus = (status: string): 'paid' | 'unpaid' => {
-    return (status === 'paid' || status === 'completed') ? 'paid' : 'unpaid';
-  };
-
-  const getPaymentStatusLabel = (status: string) => {
+  const getPaymentStatusLabel = (paymentStatus: string) => {
+    const isId = locale === 'id';
     const labels: Record<string, string> = {
-      unpaid: t('unpaid'),
-      paid: t('paid'),
+      unpaid: isId ? 'Belum Lunas' : 'Unpaid',
+      pending: isId ? 'Menunggu' : 'Pending',
+      paid: isId ? 'Lunas' : 'Paid',
+      failed: isId ? 'Gagal' : 'Failed',
+      expired: isId ? 'Kedaluwarsa' : 'Expired',
+      challenge: isId ? 'Perlu Verifikasi' : 'Challenge',
     };
-    return labels[status] || status;
+    return labels[paymentStatus] || paymentStatus;
   };
 
   // Filter Logic
@@ -402,7 +407,9 @@ export default function BookingManagement() {
       `#${b.id}`.includes(searchStr);
 
     const matchStatus = statusFilter === 'all' || b.status === statusFilter;
-    const matchPayment = paymentFilter === 'all' || getPaymentStatus(b.status) === paymentFilter;
+    // Filter payment by actual payment_status column
+    const matchPayment = paymentFilter === 'all' ||
+      (paymentFilter === 'paid' ? b.payment_status === 'paid' : b.payment_status !== 'paid');
     const matchType = typeFilter === 'all' || b.booking_type === typeFilter;
 
     return matchSearch && matchStatus && matchPayment && matchType;
@@ -415,7 +422,8 @@ export default function BookingManagement() {
   const totalCount = bookings.length;
   const pendingCount = bookings.filter(b => b.status === 'pending').length;
   const confirmedCount = bookings.filter(b => b.status === 'confirmed').length;
-  const paidCount = bookings.filter(b => b.status === 'paid' || getPaymentStatus(b.status) === 'paid').length;
+  // Count paid using actual payment_status column from Midtrans
+  const paidCount = bookings.filter(b => b.payment_status === 'paid').length;
 
   const handlePrint = () => {
     window.print();
@@ -690,8 +698,8 @@ export default function BookingManagement() {
                       </span>
                     </td>
                     <td className="px-6 py-4.5">
-                      <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold ${getPaymentStatusBadge(getPaymentStatus(b.status))}`}>
-                        {getPaymentStatusLabel(getPaymentStatus(b.status))}
+                      <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold ${getPaymentStatusBadge(b.payment_status || 'unpaid')}`}>
+                        {getPaymentStatusLabel(b.payment_status || 'unpaid')}
                       </span>
                     </td>
                     <td className="px-6 py-4.5 text-right">
