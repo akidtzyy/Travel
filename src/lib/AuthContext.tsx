@@ -2,14 +2,18 @@ import { createContext, useContext, useState, useEffect, type ReactNode } from '
 import supabase from './supabase';
 import type { User, Session } from '@supabase/supabase-js';
 
+export type UserRole = 'user' | 'admin' | 'super_admin';
+
 interface AuthContextType {
   user: User | null;
   session: Session | null;
   loading: boolean;
+  role: UserRole | null;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   isAdmin: boolean;
+  isSuperAdmin: boolean;
   isLoggedIn: boolean;
 }
 
@@ -17,14 +21,16 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   session: null,
   loading: true,
+  role: null,
   signIn: async () => ({ error: null }),
   signUp: async () => ({ error: null }),
   signOut: async () => {},
   isAdmin: false,
+  isSuperAdmin: false,
   isLoggedIn: false,
 });
 
-const fetchUserRole = async (userId: string): Promise<'user' | 'admin'> => {
+const fetchUserRole = async (userId: string): Promise<UserRole> => {
   try {
     const { data, error } = await supabase
       .from('profiles')
@@ -36,7 +42,7 @@ const fetchUserRole = async (userId: string): Promise<'user' | 'admin'> => {
       console.warn('Could not fetch user role, defaulting to user:', error.message);
       return 'user';
     }
-    return (data?.role as 'user' | 'admin') ?? 'user';
+    return (data?.role as UserRole) ?? 'user';
   } catch (err) {
     console.error('Unexpected error fetching user role:', err);
     return 'user';
@@ -46,7 +52,7 @@ const fetchUserRole = async (userId: string): Promise<'user' | 'admin'> => {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
-  const [role, setRole] = useState<'user' | 'admin' | null>(null);
+  const [role, setRole] = useState<UserRole | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -118,11 +124,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut();
   };
 
-  const isAdmin = role === 'admin';
+  // super_admin has all admin privileges + role management access
+  const isSuperAdmin = role === 'super_admin';
+  const isAdmin = role === 'admin' || role === 'super_admin';
   const isLoggedIn = !!user;
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, signIn, signUp, signOut, isAdmin, isLoggedIn }}>
+    <AuthContext.Provider value={{ user, session, loading, role, signIn, signUp, signOut, isAdmin, isSuperAdmin, isLoggedIn }}>
       {children}
     </AuthContext.Provider>
   );

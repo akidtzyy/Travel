@@ -15,7 +15,7 @@ interface AdminLayoutProps {
 
 export default function AdminLayout({ children }: AdminLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { signOut, user } = useAuth();
+  const { signOut, user, isSuperAdmin } = useAuth();
   const { t, locale, setLocale } = useI18n();
   const location = useLocation();
   const navigate = useNavigate();
@@ -30,7 +30,8 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     { path: '/admin/bookings', icon: CalendarCheck, label: t('bookingManagement') },
     { path: '/admin/stock', icon: Package, label: t('stockManagement') },
     { path: '/admin/customers', icon: Users, label: t('customerDatabase') },
-    { path: '/admin/users', icon: ShieldCheck, label: 'User Management' },
+    // Only visible to super_admin
+    ...(isSuperAdmin ? [{ path: '/admin/users', icon: ShieldCheck, label: 'User Management' }] : []),
   ];
 
   const isActive = (path: string) => location.pathname === path;
