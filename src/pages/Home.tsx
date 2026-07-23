@@ -312,9 +312,26 @@ export default function Home() {
   const handlePayNow = async () => {
     if (!pendingBookingId) return;
     setPaymentStep('processing');
+
+    // Helper: update booking status directly from frontend (reliable fallback)
+    const updateBookingStatus = async (status: string, orderId?: string) => {
+      try {
+        await fetch('/api/payment-status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            booking_id: pendingBookingId,
+            payment_status: status,
+            ...(orderId ? { order_id: orderId } : {}),
+          }),
+        });
+      } catch (e) {
+        console.warn('Could not update booking status:', e);
+      }
+    };
+
     try {
       // Get snap token from our API — pass booking details directly
-      // so server doesn't need to re-fetch from Supabase (avoids service_role key requirement)
       const res = await fetch('/api/payment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -329,7 +346,7 @@ export default function Home() {
         }),
       });
       const responseData = await res.json();
-      const { snap_token, error, details } = responseData;
+      const { snap_token, order_id, error, details } = responseData;
 
       if (!res.ok || !snap_token) {
         console.error('Payment API error:', error, details);
@@ -338,19 +355,23 @@ export default function Home() {
 
       // Open Midtrans Snap popup
       await openSnapPayment(snap_token, {
-        onSuccess: () => {
+        onSuccess: async () => {
+          // Update DB directly — don't rely solely on webhook
+          await updateBookingStatus('paid', order_id);
           setPaymentStep('success');
           resetBookingForm();
         },
-        onPending: () => {
+        onPending: async () => {
+          await updateBookingStatus('pending', order_id);
           setPaymentStep('pending');
           resetBookingForm();
         },
-        onError: () => {
+        onError: async () => {
+          await updateBookingStatus('failed', order_id);
           setPaymentStep('failed');
         },
         onClose: () => {
-          // User closed popup without finishing — treat as pending
+          // User closed without completing — don't change status
           setPaymentStep('pending');
         },
       });
