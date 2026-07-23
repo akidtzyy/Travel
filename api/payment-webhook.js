@@ -116,6 +116,18 @@ export default async function handler(req, res) {
       updatePayload.status = 'cancelled';
     }
 
+    // ── Parse booking_id from order_id ─────────────────────────────
+    // order_id format: TRAVEL-{booking_id}-{timestamp}
+    // e.g. TRAVEL-34-1753276123456 → booking_id = 34
+    let numericBookingId = null;
+    const orderIdMatch = order_id.match(/^TRAVEL-(\d+)-\d+$/);
+    if (orderIdMatch) {
+      numericBookingId = parseInt(orderIdMatch[1], 10);
+      console.log(`[Midtrans Webhook] Parsed booking_id=${numericBookingId} from order_id=${order_id}`);
+    } else {
+      console.warn(`[Midtrans Webhook] ⚠️ Cannot parse booking_id from order_id: ${order_id}`);
+    }
+
     // Create Supabase client at request time
     let supabase;
     try {
@@ -125,44 +137,53 @@ export default async function handler(req, res) {
       return res.status(200).json({ message: 'DB config error logged' });
     }
 
-    // Find booking by order_id
-    const { data: booking, error: findErr } = await supabase
-      .from('bookings')
-      .select('id, name, email, payment_status')
-      .eq('order_id', order_id)
-      .maybeSingle();
+    // ── Update booking ──────────────────────────────────────────────
+    // Try by booking_id first (most reliable), fallback to order_id
+    let updated = null;
+    let updateErr = null;
 
-    if (findErr) {
-      console.error('[Midtrans Webhook] ❌ Error finding booking:', findErr.message, '| order_id:', order_id);
-      return res.status(200).json({ message: 'DB find error logged' });
+    if (numericBookingId) {
+      const result = await supabase
+        .from('bookings')
+        .update({ ...updatePayload, order_id })  // also save order_id for future lookups
+        .eq('id', numericBookingId)
+        .select('id, name, payment_status, status')
+        .single();
+      updated = result.data;
+      updateErr = result.error;
+      console.log(`[Midtrans Webhook] Update by booking_id=${numericBookingId}:`, updateErr ? `❌ ${updateErr.message}` : `✅ OK`);
     }
 
-    if (!booking) {
-      console.warn('[Midtrans Webhook] ⚠️ No booking found with order_id:', order_id);
-      return res.status(200).json({ message: 'Booking not found, ignored' });
+    // Fallback: try by order_id
+    if (!updated && !updateErr) {
+      const result = await supabase
+        .from('bookings')
+        .update(updatePayload)
+        .eq('order_id', order_id)
+        .select('id, name, payment_status, status')
+        .maybeSingle();
+      updated = result.data;
+      updateErr = result.error;
+      console.log(`[Midtrans Webhook] Update by order_id=${order_id}:`, updateErr ? `❌ ${updateErr.message}` : updated ? `✅ OK` : `⚠️ Not found`);
     }
-
-    console.log(`[Midtrans Webhook] Found booking #${booking.id} (${booking.name}), current payment_status: ${booking.payment_status}`);
-
-    // Update booking
-    const { data: updated, error: updateErr } = await supabase
-      .from('bookings')
-      .update(updatePayload)
-      .eq('order_id', order_id)
-      .select('id, name, payment_status, status')
-      .single();
 
     if (updateErr) {
-      console.error('[Midtrans Webhook] ❌ Supabase update failed:', updateErr.message, '| order_id:', order_id);
+      console.error('[Midtrans Webhook] ❌ Supabase update failed:', updateErr.message);
       return res.status(200).json({ message: 'DB update error logged' });
     }
 
-    console.log(`[Midtrans Webhook] ✅ Updated booking #${updated?.id} → payment_status=${updated?.payment_status}, status=${updated?.status}`);
+    if (!updated) {
+      console.warn(`[Midtrans Webhook] ⚠️ No booking found for order_id=${order_id}`);
+      return res.status(200).json({ message: 'Booking not found, ignored' });
+    }
+
+    console.log(`[Midtrans Webhook] ✅ Updated booking #${updated?.id} (${updated?.name}) → payment_status=${updated?.payment_status}, status=${updated?.status}`);
     return res.status(200).json({
       message: 'OK',
       payment_status: updated?.payment_status,
       booking_id: updated?.id,
     });
+
 
   } catch (err) {
     console.error('[Midtrans Webhook] ❌ Unexpected error:', err.message, err.stack);
