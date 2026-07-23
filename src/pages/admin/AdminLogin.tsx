@@ -108,7 +108,7 @@ export default function AdminLogin() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full pl-12 pr-4 py-3.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:ring-2 focus:ring-toska-500/50 focus:border-toska-500/50 outline-none transition-all text-sm"
-                  placeholder="admin@clickandgo.id"
+                  placeholder="clickandgojourney@gmail.com"
                 />
               </div>
             </div>
@@ -168,7 +168,7 @@ export default function AdminLogin() {
             {t('notAdminMsg')}
           </Link>
           <p className="text-slate-500 text-xs">
-            © 2026 ClickAndGo — {t('adminPanel')}
+            © 2026 ClickAndGo Journey — {t('adminPanel')}
           </p>
         </div>
       </motion.div>

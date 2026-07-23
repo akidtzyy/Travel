@@ -79,3 +79,13 @@ CREATE POLICY "Authenticated can delete booking documents"
   ON storage.objects FOR DELETE
   TO authenticated
   USING (bucket_id = 'booking-documents');
+
+-- Function to reset bookings table identity sequence when empty
+CREATE OR REPLACE FUNCTION public.reset_bookings_sequence()
+RETURNS void AS $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM public.bookings) THEN
+    ALTER SEQUENCE public.bookings_id_seq RESTART WITH 1;
+  END IF;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;

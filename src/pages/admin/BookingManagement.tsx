@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   CalendarCheck, Search, Filter,
@@ -39,6 +39,17 @@ interface AddBookingForm {
   status: 'pending' | 'confirmed' | 'paid' | 'completed' | 'cancelled';
 }
 
+const paxLabels: Record<string, string> = {
+  '2pax': '2 Pax',
+  '4pax': '4 Pax',
+  '6pax': '6 Pax',
+  '8pax': '8 Pax',
+  '10pax': '10 Pax',
+  '12pax': '12 Pax',
+  '14pax': '14 Pax',
+  '15+1foc': '15+1 FOC',
+};
+
 export default function BookingManagement() {
   const { t, locale } = useI18n();
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -48,7 +59,7 @@ export default function BookingManagement() {
   const [paymentFilter, setPaymentFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-  
+
   // Modals & Selection
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
@@ -81,8 +92,113 @@ export default function BookingManagement() {
   const [page, setPage] = useState(1);
   const perPage = 10;
 
+  // States for packages & cars database dropdowns
+  const [packages, setPackages] = useState<any[]>([]);
+  const [cars, setCars] = useState<any[]>([]);
+  const [selectedPkgId, setSelectedPkgId] = useState<number | ''>('');
+  const [selectedHotelIdx, setSelectedHotelIdx] = useState<number | ''>('');
+  const [selectedPaxKey, setSelectedPaxKey] = useState<string>('');
+  const [selectedCarId, setSelectedCarId] = useState<number | ''>('');
+  const [selectedCarType, setSelectedCarType] = useState<'self_drive' | 'with_driver'>('self_drive');
+
+  // Computed values
+  const selectedPkg = useMemo(() => packages.find(p => p.id === selectedPkgId), [packages, selectedPkgId]);
+  const selectedHotel = useMemo(() => {
+    if (selectedHotelIdx === '' || !selectedPkg?.included?.hotels) return null;
+    return selectedPkg.included.hotels[selectedHotelIdx];
+  }, [selectedPkg, selectedHotelIdx]);
+
+  const isPaxPricing = useMemo(() => {
+    if (!selectedHotel?.prices) return true;
+    return Object.keys(selectedHotel.prices).every(k => k in paxLabels);
+  }, [selectedHotel]);
+
+  const selectedCar = useMemo(() => cars.find(c => c.id === selectedCarId), [cars, selectedCarId]);
+
+  const computedPrice = useMemo(() => {
+    if (addForm.booking_type === 'package' && selectedHotel && selectedPaxKey) {
+      return selectedHotel.prices[selectedPaxKey] || 0;
+    }
+    if (addForm.booking_type === 'car' && selectedCar) {
+      return selectedCar.price;
+    }
+    return 0;
+  }, [addForm.booking_type, selectedHotel, selectedPaxKey, selectedCar]);
+
+  // Helper to format currency
+  const formatPrice = (price: number) => {
+    return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(price);
+  };
+
+  // Sync selection with addForm values
+  useEffect(() => {
+    if (addForm.booking_type === 'package') {
+      if (selectedPkg && selectedHotel && selectedPaxKey) {
+        const paxLabel = isPaxPricing ? (paxLabels[selectedPaxKey] || selectedPaxKey) : selectedPaxKey;
+        setAddForm(prev => ({
+          ...prev,
+          item_name: `${selectedPkg.name} — ${selectedHotel.hotel}`,
+          duration: paxLabel,
+          total_price: formatPrice(computedPrice),
+        }));
+      } else {
+        setAddForm(prev => ({
+          ...prev,
+          item_name: '',
+          duration: '',
+          total_price: '',
+        }));
+      }
+    } else if (addForm.booking_type === 'car') {
+      if (selectedCar) {
+        const carTypeLabel = selectedCarType === 'self_drive' ? 'Self Drive' : 'With Driver';
+        setAddForm(prev => ({
+          ...prev,
+          item_name: `${selectedCar.name} (${carTypeLabel})`,
+          duration: selectedCar.duration_desc,
+          total_price: formatPrice(computedPrice),
+        }));
+      } else {
+        setAddForm(prev => ({
+          ...prev,
+          item_name: '',
+          duration: '',
+          total_price: '',
+        }));
+      }
+    }
+  }, [addForm.booking_type, selectedPkg, selectedHotel, selectedPaxKey, selectedCar, selectedCarType, computedPrice, isPaxPricing]);
+
+  // Reset dropdown selections when booking_type changes
+  useEffect(() => {
+    setSelectedPkgId('');
+    setSelectedHotelIdx('');
+    setSelectedPaxKey('');
+    setSelectedCarId('');
+    setSelectedCarType('self_drive');
+  }, [addForm.booking_type]);
+
+  const loadInitialData = async () => {
+    try {
+      const { data: pkgs } = await supabase
+        .from('tour_packages')
+        .select('*')
+        .eq('is_available', true);
+      if (pkgs) setPackages(pkgs);
+
+      const { data: carData } = await supabase
+        .from('car_rentals')
+        .select('*')
+        .eq('is_available', true);
+      if (carData) setCars(carData);
+    } catch (err) {
+      console.error('Error loading initial database items:', err);
+    }
+  };
+
   useEffect(() => {
     loadBookings();
+    loadInitialData();
   }, []);
 
   const loadBookings = async () => {
@@ -115,13 +231,20 @@ export default function BookingManagement() {
         setSelectedBooking(prev => prev ? { ...prev, status: value as any } : null);
       }
 
-      const { error } = await supabase.from('bookings').update({ status: value }).eq('id', id);
+      const updates: any = { status: value };
+      if (value === 'paid' || value === 'completed') {
+        updates.payment_status = 'paid';
+      } else {
+        updates.payment_status = 'unpaid';
+      }
+
+      const { error } = await supabase.from('bookings').update(updates).eq('id', id);
       if (error) throw error;
 
       showToast('success', t('bookingSaved'));
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error updating status:', err);
-      showToast('error', t('errorOccurred'));
+      showToast('error', err?.message || t('errorOccurred'));
       loadBookings(); // Rollback
     }
   };
@@ -131,10 +254,21 @@ export default function BookingManagement() {
       const { error } = await supabase.from('bookings').delete().eq('id', id);
       if (error) throw error;
       showToast('success', t('bookingDeleted'));
+
+      // Check if table is empty to reset sequence
+      const { count } = await supabase.from('bookings').select('*', { count: 'exact', head: true });
+      if (count === 0) {
+        try {
+          await supabase.rpc('reset_bookings_sequence');
+        } catch (rpcErr) {
+          console.warn('Failed to reset sequence via RPC (possibly function not created in DB yet):', rpcErr);
+        }
+      }
+
       loadBookings();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error deleting booking:', err);
-      showToast('error', t('errorOccurred'));
+      showToast('error', err?.message || t('errorOccurred'));
     }
     setDeleteConfirm(null);
   };
@@ -161,6 +295,8 @@ export default function BookingManagement() {
   const resetAddForm = () => {
     setAddForm({ name: '', email: '', phone: '', booking_type: 'package', item_name: '', date: '', duration: '', notes: '', total_price: '', status: 'pending' });
     setKtpFile(null); setSimFile(null); setKtpPreview(null); setSimPreview(null);
+    setSelectedPkgId(''); setSelectedHotelIdx(''); setSelectedPaxKey('');
+    setSelectedCarId(''); setSelectedCarType('self_drive');
     if (ktpInputRef.current) ktpInputRef.current.value = '';
     if (simInputRef.current) simInputRef.current.value = '';
   };
@@ -171,6 +307,17 @@ export default function BookingManagement() {
     try {
       let ktp_url: string | null = null;
       let sim_url: string | null = null;
+
+      if (!ktpFile) {
+        showToast('error', locale === 'id' ? 'Foto KTP wajib diupload!' : 'KTP photo is required!');
+        setAddLoading(false);
+        return;
+      }
+      if (addForm.booking_type === 'car' && !simFile) {
+        showToast('error', locale === 'id' ? 'Foto SIM wajib diupload untuk sewa mobil!' : 'SIM photo is required for car rental!');
+        setAddLoading(false);
+        return;
+      }
 
       if (ktpFile) {
         ktp_url = await uploadDoc(ktpFile, 'ktp');
@@ -278,14 +425,14 @@ export default function BookingManagement() {
     const rows = filteredBookings.map(b => [
       b.id, `"${b.name}"`, b.email, b.phone,
       b.booking_type, `"${b.item_name}"`, b.date, b.duration,
-      `"${b.total_price}"`, b.status, getPaymentStatus(b.status), b.created_at.slice(0,10)
+      `"${b.total_price}"`, b.status, getPaymentStatus(b.status), b.created_at?.slice(0, 10) || ''
     ]);
     const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `bookings_${new Date().toISOString().slice(0,10)}.csv`;
+    link.download = `bookings_${new Date().toISOString().slice(0, 10)}.csv`;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -330,11 +477,10 @@ export default function BookingManagement() {
             initial={{ opacity: 0, y: -50, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -20, scale: 0.9 }}
-            className={`fixed top-4 right-4 z-50 flex items-center gap-2.5 px-4 py-3.5 rounded-xl border shadow-lg ${
-              toast.type === 'success'
-                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                : 'bg-red-50 text-red-800 border-red-200'
-            }`}
+            className={`fixed top-4 right-4 z-50 flex items-center gap-2.5 px-4 py-3.5 rounded-xl border shadow-lg ${toast.type === 'success'
+              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+              : 'bg-red-50 text-red-800 border-red-200'
+              }`}
           >
             {toast.type === 'success' ? (
               <Check className="w-5 h-5 text-emerald-600" />
@@ -489,9 +635,9 @@ export default function BookingManagement() {
       </div>
 
       {/* Main Table */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden print:hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-left">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden w-full max-w-full print:hidden">
+        <div className="overflow-x-auto w-full">
+          <table className="w-full border-collapse text-left min-w-[1100px]">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 text-[11px] font-semibold uppercase tracking-wider">
                 <th className="px-6 py-4">{t('bookingId')}</th>
@@ -519,11 +665,10 @@ export default function BookingManagement() {
                       </div>
                     </td>
                     <td className="px-6 py-4.5">
-                      <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold ${
-                        b.booking_type === 'package'
-                          ? 'bg-orange-50 text-orange-600 border border-orange-200'
-                          : 'bg-cyan-50 text-cyan-600 border border-cyan-200'
-                      }`}>
+                      <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold ${b.booking_type === 'package'
+                        ? 'bg-orange-50 text-orange-600 border border-orange-200'
+                        : 'bg-cyan-50 text-cyan-600 border border-cyan-200'
+                        }`}>
                         {b.booking_type === 'package' ? (
                           <Palmtree className="w-3.5 h-3.5" />
                         ) : (
@@ -567,7 +712,7 @@ export default function BookingManagement() {
 
                         {/* WhatsApp Quick Contact */}
                         <a
-                          href={`https://wa.me/${b.phone.replace(/\D/g,'')}?text=${encodeURIComponent(`Halo ${b.name}, kami dari ClickAndGo ingin mengkonfirmasi booking Anda untuk ${b.item_name} pada tanggal ${b.date}. Mohon konfirmasinya. Terima kasih!`)}`}
+                          href={`https://wa.me/${b.phone.replace(/\D/g, '')}?text=${encodeURIComponent(`Halo ${b.name}, kami dari ClickAndGo Journey ingin mengkonfirmasi booking Anda untuk ${b.item_name} pada tanggal ${b.date}. Mohon konfirmasinya. Terima kasih!`)}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           title="Hubungi via WhatsApp"
@@ -575,7 +720,7 @@ export default function BookingManagement() {
                         >
                           <MessageCircle className="w-4 h-4" />
                         </a>
-                        
+
                         {/* Quick Confirm */}
                         {b.status === 'pending' && (
                           <button
@@ -703,7 +848,7 @@ export default function BookingManagement() {
                   <h3 className="text-base font-bold font-[family-name:var(--font-display)]">
                     {t('bookingDetails')}
                   </h3>
-                  <p className="text-xs text-slate-400 mt-0.5">#{selectedBooking.id} • {selectedBooking.created_at.slice(0, 10)}</p>
+                  <p className="text-xs text-slate-400 mt-0.5">#{selectedBooking.id} • {selectedBooking.created_at?.slice(0, 10) || ''}</p>
                 </div>
                 <button
                   onClick={() => setShowDetailModal(false)}
@@ -886,12 +1031,12 @@ export default function BookingManagement() {
       {/* Invoice Print Modal */}
       <AnimatePresence>
         {showInvoiceModal && selectedBooking && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto print:bg-white print:p-0 print:absolute print:inset-0 print:z-auto">
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 print:bg-white print:p-0 print:absolute print:inset-0 print:z-auto">
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col my-8 print:my-0 print:shadow-none print:border-none print:w-full"
+              className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] shadow-2xl border border-slate-200 overflow-hidden flex flex-col print:max-h-none print:overflow-visible print:border-none print:shadow-none print:w-full"
             >
               {/* Modal controls - hidden in print */}
               <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between print:hidden">
@@ -914,7 +1059,7 @@ export default function BookingManagement() {
               </div>
 
               {/* Printable Invoice Container */}
-              <div id="printable-invoice" className="p-10 space-y-8 bg-white text-slate-800 font-sans">
+              <div id="printable-invoice" className="p-10 space-y-8 bg-white text-slate-800 font-sans overflow-y-auto flex-1 print:overflow-visible print:p-0">
                 {/* Invoice Header */}
                 <div className="flex justify-between items-start border-b-2 border-slate-100 pb-6">
                   <div className="flex items-center gap-2.5">
@@ -922,7 +1067,7 @@ export default function BookingManagement() {
                       <Palmtree className="w-6 h-6" />
                     </div>
                     <div>
-                      <h2 className="text-lg font-bold tracking-tight text-slate-900 font-[family-name:var(--font-display)]">ClickAndGo</h2>
+                      <h2 className="text-lg font-bold tracking-tight text-slate-900 font-[family-name:var(--font-display)]">ClickAndGo Journey</h2>
                       <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">Bali Travel & Rent</p>
                     </div>
                   </div>
@@ -936,11 +1081,11 @@ export default function BookingManagement() {
                 <div className="grid grid-cols-2 gap-8 text-xs">
                   <div>
                     <h4 className="font-bold text-slate-900 uppercase tracking-wider mb-2.5">{locale === 'id' ? 'Diterbitkan Oleh' : 'Issued By'}</h4>
-                    <p className="font-bold text-slate-800">ClickAndGo Bali</p>
-                    <p className="text-slate-500 mt-1">Jl. Raya Kuta No. 100, Kuta</p>
-                    <p className="text-slate-500">Badung, Bali 80361</p>
+                    <p className="font-bold text-slate-800">ClickAndGo Journey</p>
+                    <p className="text-slate-500 mt-1">Jl. Danau Tondano IV/9A</p>
+                    <p className="text-slate-500">Sanur, Denpasar, Bali</p>
                     <p className="text-slate-500 mt-1.5">WhatsApp: +62 812-4349-9265</p>
-                    <p className="text-slate-500">Email: support@clickandgobali.com</p>
+                    <p className="text-slate-500">Email: clickandgojourney@gmail.com</p>
                   </div>
                   <div>
                     <h4 className="font-bold text-slate-900 uppercase tracking-wider mb-2.5">{locale === 'id' ? 'Ditujukan Kepada' : 'Billed To'}</h4>
@@ -949,7 +1094,7 @@ export default function BookingManagement() {
                     <p className="text-slate-500">Phone: {selectedBooking.phone}</p>
                     <p className="text-slate-500 mt-3.5">
                       <span className="font-medium text-slate-800">{locale === 'id' ? 'Tanggal Invoice:' : 'Date Issued:'}</span>{' '}
-                      {selectedBooking.created_at.slice(0, 10)}
+                       {selectedBooking.created_at?.slice(0, 10) || ''}
                     </p>
                   </div>
                 </div>
@@ -1016,10 +1161,10 @@ export default function BookingManagement() {
                   </div>
                   <div className="text-right flex flex-col justify-end items-end space-y-12">
                     <div className="text-center w-40">
-                      <p className="text-[9px] uppercase tracking-wider mb-8 text-slate-400">ClickAndGo Travel Bali</p>
+                      <p className="text-[9px] uppercase tracking-wider mb-8 text-slate-400">ClickAndGo Journey</p>
                       <div className="w-20 h-20 bg-slate-100 border border-slate-200 rounded flex items-center justify-center mx-auto mb-2 text-slate-400">
                         {/* Stamp placeholder */}
-                        <div className="text-[10px] font-bold border border-slate-300 p-1 rotate-[-12deg] uppercase">ClickAndGo</div>
+                        <div className="text-[10px] font-bold border border-slate-300 p-1 rotate-[-12deg] uppercase">ClickAndGo Journey</div>
                       </div>
                       <p className="font-bold text-slate-800 text-[10px]">AUTHORIZED SIGNATURE</p>
                     </div>
@@ -1028,7 +1173,7 @@ export default function BookingManagement() {
 
                 {/* Thank you */}
                 <div className="text-center text-[10px] text-slate-400 pt-4 border-t border-slate-100">
-                  <p>Matur Suksma. Thank you for choosing ClickAndGo Travel & Rental for your Bali trip!</p>
+                  <p>Matur Suksma. Thank you for choosing ClickAndGo Journey for your Bali trip!</p>
                 </div>
               </div>
             </motion.div>
@@ -1039,12 +1184,12 @@ export default function BookingManagement() {
       {/* Add Booking Modal */}
       <AnimatePresence>
         {showAddModal && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 15 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 15 }}
-              className="bg-white rounded-2xl w-full max-w-2xl border border-slate-200 shadow-2xl overflow-hidden flex flex-col my-8"
+              className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] border border-slate-200 shadow-2xl overflow-hidden flex flex-col"
             >
               {/* Modal Header */}
               <div className="px-6 py-5 bg-gradient-to-r from-slate-900 to-slate-800 text-white flex items-center justify-between">
@@ -1138,39 +1283,127 @@ export default function BookingManagement() {
                           className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-toska-500 text-sm text-slate-700"
                         />
                       </div>
-                      <div className="sm:col-span-2">
-                        <label className="text-xs font-medium text-slate-600 block mb-1.5">{locale === 'id' ? 'Nama Item' : 'Item Name'} *</label>
-                        <input
-                          type="text"
-                          required
-                          value={addForm.item_name}
-                          onChange={e => setAddForm(p => ({ ...p, item_name: e.target.value }))}
-                          placeholder={t('itemNamePlaceholder')}
-                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-toska-500 text-sm text-slate-800 placeholder-slate-400"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs font-medium text-slate-600 block mb-1.5">{locale === 'id' ? 'Jumlah / Durasi' : 'Duration / Pax'} *</label>
-                        <input
-                          type="text"
-                          required
-                          value={addForm.duration}
-                          onChange={e => setAddForm(p => ({ ...p, duration: e.target.value }))}
-                          placeholder={t('durationPlaceholder')}
-                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-toska-500 text-sm text-slate-800 placeholder-slate-400"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs font-medium text-slate-600 block mb-1.5">{t('price')} *</label>
-                        <input
-                          type="text"
-                          required
-                          value={addForm.total_price}
-                          onChange={e => setAddForm(p => ({ ...p, total_price: e.target.value }))}
-                          placeholder={t('totalPricePlaceholder')}
-                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-toska-500 text-sm text-slate-800 placeholder-slate-400"
-                        />
-                      </div>
+                      {addForm.booking_type === 'package' ? (
+                        <>
+                          <div>
+                            <label className="text-xs font-medium text-slate-600 block mb-1.5">{locale === 'id' ? 'Pilih Paket Wisata' : 'Select Tour Package'} *</label>
+                            <select
+                              required
+                              value={selectedPkgId}
+                              onChange={e => {
+                                setSelectedPkgId(e.target.value === '' ? '' : Number(e.target.value));
+                                setSelectedHotelIdx('');
+                                setSelectedPaxKey('');
+                              }}
+                              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-toska-500 text-sm text-slate-700 bg-white"
+                            >
+                              <option value="">{locale === 'id' ? '-- Pilih Paket --' : '-- Select Package --'}</option>
+                              {packages.map(p => (
+                                <option key={p.id} value={p.id}>{p.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-xs font-medium text-slate-600 block mb-1.5">{locale === 'id' ? 'Pilih Hotel' : 'Select Hotel'} *</label>
+                            <select
+                              required
+                              disabled={!selectedPkgId}
+                              value={selectedHotelIdx}
+                              onChange={e => {
+                                setSelectedHotelIdx(e.target.value === '' ? '' : Number(e.target.value));
+                                setSelectedPaxKey('');
+                              }}
+                              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-toska-500 text-sm text-slate-700 bg-white disabled:opacity-50"
+                            >
+                              <option value="">{locale === 'id' ? '-- Pilih Hotel --' : '-- Select Hotel --'}</option>
+                              {selectedPkg?.included?.hotels?.map((h: any, idx: number) => (
+                                <option key={idx} value={idx}>{h.hotel}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-xs font-medium text-slate-600 block mb-1.5">{locale === 'id' ? 'Jumlah / Durasi' : 'Duration / Pax'} *</label>
+                            <select
+                              required
+                              disabled={selectedHotelIdx === ''}
+                              value={selectedPaxKey}
+                              onChange={e => setSelectedPaxKey(e.target.value)}
+                              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-toska-500 text-sm text-slate-700 bg-white disabled:opacity-50"
+                            >
+                              <option value="">{locale === 'id' ? '-- Pilih Jumlah/Durasi --' : '-- Select Duration/Pax --'}</option>
+                              {selectedHotel?.prices && Object.keys(selectedHotel.prices).map(key => (
+                                <option key={key} value={key}>{paxLabels[key] || key}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-xs font-medium text-slate-600 block mb-1.5">{t('price')} *</label>
+                            <input
+                              type="text"
+                              readOnly
+                              required
+                              value={addForm.total_price}
+                              placeholder={t('totalPricePlaceholder')}
+                              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:outline-none text-sm text-slate-500 font-medium"
+                            />
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div>
+                            <label className="text-xs font-medium text-slate-600 block mb-1.5">{locale === 'id' ? 'Pilih Kendaraan' : 'Select Vehicle'} *</label>
+                            <select
+                              required
+                              value={selectedCarId}
+                              onChange={e => setSelectedCarId(e.target.value === '' ? '' : Number(e.target.value))}
+                              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-toska-500 text-sm text-slate-700 bg-white"
+                            >
+                              <option value="">{locale === 'id' ? '-- Pilih Kendaraan --' : '-- Select Vehicle --'}</option>
+                              {cars.map(c => (
+                                <option key={c.id} value={c.id}>{c.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-xs font-medium text-slate-600 block mb-1.5">{locale === 'id' ? 'Pilih Layanan' : 'Select Service'} *</label>
+                            <select
+                              required
+                              value={selectedCarType}
+                              onChange={e => setSelectedCarType(e.target.value as 'self_drive' | 'with_driver')}
+                              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-toska-500 text-sm text-slate-700 bg-white"
+                            >
+                              <option value="self_drive">{locale === 'id' ? 'Lepas Kunci (Self Drive)' : 'Self Drive'}</option>
+                              <option value="with_driver">{locale === 'id' ? 'Dengan Sopir (With Driver)' : 'With Driver'}</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-xs font-medium text-slate-600 block mb-1.5">{locale === 'id' ? 'Jumlah / Durasi' : 'Duration / Pax'} *</label>
+                            <select
+                              required
+                              disabled={!selectedCarId}
+                              value={addForm.duration}
+                              onChange={e => setAddForm(p => ({ ...p, duration: e.target.value }))}
+                              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-toska-500 text-sm text-slate-700 bg-white disabled:opacity-50"
+                            >
+                              <option value="">{locale === 'id' ? '-- Pilih Durasi --' : '-- Select Duration --'}</option>
+                              {selectedCar && (
+                                <option value={selectedCar.duration_desc}>{selectedCar.duration_desc}</option>
+                              )}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-xs font-medium text-slate-600 block mb-1.5">{t('price')} *</label>
+                            <input
+                              type="text"
+                              readOnly
+                              required
+                              value={addForm.total_price}
+                              placeholder={t('totalPricePlaceholder')}
+                              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:outline-none text-sm text-slate-500 font-medium"
+                            />
+                          </div>
+                        </>
+                      )}
                       <div className="sm:col-span-2">
                         <label className="text-xs font-medium text-slate-600 block mb-1.5">{t('status')}</label>
                         <select
@@ -1258,9 +1491,8 @@ export default function BookingManagement() {
                       <p className="text-[11px] text-slate-400 mb-2">{t('simUploadHint')}</p>
                       <div
                         onClick={() => simInputRef.current?.click()}
-                        className={`relative border-2 border-dashed rounded-xl p-4 cursor-pointer hover:border-toska-400 hover:bg-toska-50/30 transition-all group ${
-                          addForm.booking_type === 'car' ? 'border-amber-300 bg-amber-50/20' : 'border-slate-200'
-                        }`}
+                        className={`relative border-2 border-dashed rounded-xl p-4 cursor-pointer hover:border-toska-400 hover:bg-toska-50/30 transition-all group ${addForm.booking_type === 'car' ? 'border-amber-300 bg-amber-50/20' : 'border-slate-200'
+                          }`}
                       >
                         <input
                           ref={simInputRef}

@@ -57,7 +57,7 @@ const translations = {
     signUpSuccess: 'Pendaftaran berhasil! Silakan cek email Anda untuk verifikasi, lalu login.',
     loginFailed: 'Email atau kata sandi salah. Silakan coba lagi.',
     genericError: 'Terjadi kesalahan. Silakan coba lagi.',
-    copyrightText: '© 2026 ClickAndGo — Wisata Bali Terpercaya',
+    copyrightText: '© 2026 ClickAndGo Journey — Wisata Bali Terpercaya',
 
     // Admin Sidebar
     dashboard: 'Dashboard',
@@ -228,7 +228,7 @@ const translations = {
     sendingData: 'Mengirim data...',
     bookingSuccess: 'Booking Berhasil!',
     bookingSuccessDesc: 'Terima kasih! Kami akan segera menghubungi Anda melalui WhatsApp untuk konfirmasi pembayaran.',
-    
+
     // Package Card specific
     destinationsLabel: 'Destinasi',
     viewFullItinerary: 'Lihat Itinerary Lengkap',
@@ -286,7 +286,7 @@ const translations = {
 
     // Terms & Privacy
     termsTitle: 'Syarat & Ketentuan',
-    termsSubtitle: 'Aturan dan pedoman penggunaan layanan ClickAndGo untuk kenyamanan bersama.',
+    termsSubtitle: 'Aturan dan pedoman penggunaan layanan ClickAndGo Journey untuk kenyamanan bersama.',
     termsPaymentTitle: 'Pemesanan & Pembayaran',
     termsPayment1: 'Uang muka (DP) minimal 50% dari total biaya wajib dibayarkan saat pemesanan untuk mengamankan slot.',
     termsPayment2: 'Pelunasan sisa pembayaran dilakukan paling lambat H-1 sebelum keberangkatan atau saat penjemputan.',
@@ -341,7 +341,7 @@ const translations = {
     signUpSuccess: 'Registration successful! Please check your email for verification, then login.',
     loginFailed: 'Invalid email or password. Please try again.',
     genericError: 'An error occurred. Please try again.',
-    copyrightText: '© 2026 ClickAndGo — Trusted Bali Travel',
+    copyrightText: '© 2026 ClickAndGo Journey— Trusted Bali Travel',
 
     // Admin Sidebar
     dashboard: 'Dashboard',
@@ -570,7 +570,7 @@ const translations = {
 
     // Terms & Privacy
     termsTitle: 'Terms & Conditions',
-    termsSubtitle: 'Rules and guidelines for using ClickAndGo services for mutual comfort.',
+    termsSubtitle: 'Rules and guidelines for using ClickAndGo Journeyservices for mutual comfort.',
     termsPaymentTitle: 'Booking & Payment',
     termsPayment1: 'A minimum 50% deposit of the total cost is required upon booking to secure your slot.',
     termsPayment2: 'Remaining balance must be paid at the latest 1 day before departure or during pick-up.',
@@ -652,7 +652,7 @@ const dbTranslations: Record<string, string> = {
   'Pirate/Phinisi Dinner Cruise': 'Pirate/Phinisi Dinner Cruise',
   'Grand Puncak Sari Rest': 'Grand Puncak Sari Restaurant',
   'Shera Rest': 'Shera Restaurant',
-  
+
   // Excludes
   'Tiket pesawat': 'Flight tickets',
   'Porter': 'Porter service',

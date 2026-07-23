@@ -108,9 +108,9 @@ export default function CarRentalPage() {
 
   const handleBooking = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // Format pesan WhatsApp (selalu gunakan bahasa Indonesia untuk admin)
-    const message = `*BOOKING SEWA MOBIL - ClickAndGo*%0A%0A` +
+    const message = `*BOOKING SEWA MOBIL - ClickAndGo Journey*%0A%0A` +
       `*Kendaraan:* ${bookingForm.item_name}%0A` +
       `*Durasi Sewa:* ${bookingForm.duration || 'Belum ditentukan'}%0A` +
       `*Harga:* ${bookingForm.total_price}%0A%0A` +
@@ -121,15 +121,15 @@ export default function CarRentalPage() {
       `Tanggal Sewa: ${bookingForm.date}%0A%0A` +
       `${bookingForm.notes ? `*Catatan:*%0A${bookingForm.notes}%0A%0A` : ''}` +
       `Mohon informasi lebih lanjut. Terima kasih!`;
-    
+
     // Nomor WhatsApp admin
     const whatsappNumber = '6281243499265'; // Format: 62xxx (tanpa + atau 0)
-    
+
     try {
       setBookingLoading(true);
       const cleanPhone = bookingForm.phone.replace(/\D/g, '');
       const notesWithDetails = `Tipe: Sewa Mobil\nKendaraan: ${bookingForm.item_name}\nDurasi: ${bookingForm.duration}\nTanggal Sewa: ${bookingForm.date}\nHarga: ${bookingForm.total_price}\nCatatan: ${bookingForm.notes}`;
-      
+
       // Original Customer insert
       const { error: custErr } = await supabase.from('customers').insert({
         full_name: bookingForm.name,
@@ -161,10 +161,10 @@ export default function CarRentalPage() {
     } finally {
       setBookingLoading(false);
     }
-    
+
     // Redirect ke WhatsApp
     window.open(`https://wa.me/${whatsappNumber}?text=${message}`, '_blank');
-    
+
     // Reset form
     setBookingForm(prev => ({
       ...prev,
@@ -248,22 +248,20 @@ export default function CarRentalPage() {
         <div className="bg-white rounded-2xl shadow-xl border border-ocean-100 p-2 inline-flex gap-2">
           <button
             onClick={() => { setActiveTab('self_drive'); setSelectedCarId(''); }}
-            className={`flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm transition-all ${
-              activeTab === 'self_drive'
+            className={`flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm transition-all ${activeTab === 'self_drive'
                 ? 'bg-toska-500 text-white shadow-lg shadow-toska-500/25'
                 : 'text-ocean-600 hover:bg-ocean-50'
-            }`}
+              }`}
           >
             <Settings className="w-4 h-4" />
             {t('selfDrive')}
           </button>
           <button
             onClick={() => { setActiveTab('with_driver'); setSelectedCarId(''); }}
-            className={`flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm transition-all ${
-              activeTab === 'with_driver'
+            className={`flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm transition-all ${activeTab === 'with_driver'
                 ? 'bg-toska-500 text-white shadow-lg shadow-toska-500/25'
                 : 'text-ocean-600 hover:bg-ocean-50'
-            }`}
+              }`}
           >
             <Users className="w-4 h-4" />
             {t('withDriver')}
@@ -454,11 +452,11 @@ export default function CarRentalPage() {
                     }}
                     onKeyDown={e => {
                       if ([8, 9, 27, 13, 46, 37, 39].includes(e.keyCode) ||
-                          (e.ctrlKey && [65, 67, 86, 88].includes(e.keyCode))) {
+                        (e.ctrlKey && [65, 67, 86, 88].includes(e.keyCode))) {
                         return;
                       }
                       if ((e.keyCode < 48 || e.keyCode > 57) &&
-                          (e.keyCode < 96 || e.keyCode > 105)) {
+                        (e.keyCode < 96 || e.keyCode > 105)) {
                         e.preventDefault();
                       }
                     }}
@@ -486,22 +484,20 @@ export default function CarRentalPage() {
                     <button
                       type="button"
                       onClick={() => { setActiveTab('self_drive'); setSelectedCarId(''); }}
-                      className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold transition-all border ${
-                        activeTab === 'self_drive'
+                      className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold transition-all border ${activeTab === 'self_drive'
                           ? 'bg-toska-500 text-white border-toska-500 shadow-md'
                           : 'bg-white text-ocean-700 border-ocean-200 hover:border-toska-300'
-                      }`}
+                        }`}
                     >
                       🔑 {t('selfDrive')}
                     </button>
                     <button
                       type="button"
                       onClick={() => { setActiveTab('with_driver'); setSelectedCarId(''); }}
-                      className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold transition-all border ${
-                        activeTab === 'with_driver'
+                      className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold transition-all border ${activeTab === 'with_driver'
                           ? 'bg-toska-500 text-white border-toska-500 shadow-md'
                           : 'bg-white text-ocean-700 border-ocean-200 hover:border-toska-300'
-                      }`}
+                        }`}
                     >
                       👤 {t('withDriver')}
                     </button>

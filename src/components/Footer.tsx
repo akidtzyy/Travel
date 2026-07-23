@@ -12,7 +12,7 @@ export default function Footer() {
           <div>
             <div className="flex items-center gap-2 mb-5">
               <span className="text-2xl">🌴</span>
-              <span className="text-xl font-bold font-[family-name:var(--font-display)]">ClickAndGo</span>
+              <span className="text-xl font-bold font-[family-name:var(--font-display)]">ClickAndGo Journey</span>
             </div>
             <p className="text-ocean-300 text-sm leading-relaxed mb-6">
               {locale === 'id'
@@ -21,7 +21,7 @@ export default function Footer() {
             </p>
             <div className="flex gap-3">
               <a
-                href="https://instagram.com/clickandgo"
+                href="https://instagram.com/clickandgojourney"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="w-10 h-10 bg-ocean-800 hover:bg-gradient-to-br hover:from-purple-600 hover:to-pink-500 rounded-lg flex items-center justify-center transition-all hover:scale-110"
@@ -32,7 +32,7 @@ export default function Footer() {
                 </svg>
               </a>
               <a
-                href="https://facebook.com/clickandgo"
+                href="https://www.facebook.com/profile.php?id=61592034970656"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="w-10 h-10 bg-ocean-800 hover:bg-blue-600 rounded-lg flex items-center justify-center transition-all hover:scale-110"
@@ -69,8 +69,8 @@ export default function Footer() {
             <ul className="space-y-2.5 text-ocean-300 text-sm">
               <li><a href="/#faq" className="hover:text-toska-400 transition-colors">{t('faq')}</a></li>
               <li><a href="/#testimoni" className="hover:text-toska-400 transition-colors">{t('testimonials')}</a></li>
-              <li><a href="/#syarat-ketentuan" className="hover:text-toska-400 transition-colors">{t('termsTitle')}</a></li>
-              <li><a href="/#kebijakan-privasi" className="hover:text-toska-400 transition-colors">{t('privacyTitle')}</a></li>
+              <li><Link to="/ketentuan-privasi?tab=terms" className="hover:text-toska-400 transition-colors">{t('termsTitle')}</Link></li>
+              <li><Link to="/ketentuan-privasi?tab=privacy" className="hover:text-toska-400 transition-colors">{t('privacyTitle')}</Link></li>
             </ul>
           </div>
           <div>
@@ -82,17 +82,17 @@ export default function Footer() {
               </li>
               <li className="flex items-center gap-2">
                 <Mail className="w-4 h-4 text-toska-400" />
-                clickandgo@gmail.com
+                clickandgojourney@gmail.com
               </li>
               <li className="flex items-start gap-2">
                 <MapPin className="w-4 h-4 text-toska-400 shrink-0 mt-0.5" />
-                Jl. Sunset Road No. 88, Kuta, Badung, Bali 80361
+                Jl. Danau Tondano IV / 9A, Sanur, Denpasar, Bali
               </li>
             </ul>
           </div>
         </div>
         <div className="border-t border-ocean-800 mt-14 pt-10 text-center text-ocean-400 text-sm">
-          © 2026 ClickAndGo. All rights reserved. Made with ❤️ in Bali.
+          © 2026 ClickAndGo Journey. All rights reserved. Made with ❤️ in Bali.
         </div>
       </div>
     </footer>

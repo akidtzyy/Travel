@@ -1,11 +1,13 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { MapPin, Clock, Users, Star, ChevronDown, ChevronUp, Phone, Mail, Send, CheckCircle, Calendar, Car, Sparkles, Shield, Heart, LogIn, UserCheck, FileText, Lock } from 'lucide-react';
+import { Star, ChevronDown, ChevronUp, Phone, CheckCircle, Car, Sparkles, Shield, Heart, LogIn, UserCheck, CreditCard } from 'lucide-react';
 import Lenis from 'lenis';
 import Hero from '../components/Hero';
 import PackageCard from '../components/PackageCard';
 import Footer from '../components/Footer';
+import PaymentModal, { type PaymentStep } from '../components/PaymentModal';
+import { openSnapPayment } from '../lib/midtrans';
 import supabase from '../lib/supabase';
 import { useAuth } from '../lib/AuthContext';
 import { useI18n } from '../lib/I18nContext';
@@ -20,8 +22,8 @@ interface TourPackage {
   image_url: string;
   category: string;
   included?: {
-    itinerary?: Array<{day: number; title: string; activities: string[]}>;
-    hotels?: Array<{hotel: string; prices: Record<string, number>}>;
+    itinerary?: Array<{ day: number; title: string; activities: string[] }>;
+    hotels?: Array<{ hotel: string; prices: Record<string, number> }>;
     includes_list?: string[];
     excludes_list?: string[];
   };
@@ -104,6 +106,10 @@ export default function Home() {
   });
   const [bookingSuccess, setBookingSuccess] = useState(false);
   const [bookingLoading, setBookingLoading] = useState(false);
+
+  // Payment state
+  const [paymentStep, setPaymentStep] = useState<PaymentStep>('closed');
+  const [pendingBookingId, setPendingBookingId] = useState<number | null>(null);
 
   // Lenis smooth scrolling
   useEffect(() => {
@@ -257,33 +263,13 @@ export default function Home() {
 
   const handleBooking = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Format pesan WhatsApp (selalu gunakan bahasa Indonesia untuk admin)
-    const message = `*BOOKING BARU - ClickAndGo*%0A%0A` +
-      `Halo Admin ClickAndGo,%0A%0A` +
-      `Saya ingin melakukan pemesanan dengan rincian sebagai berikut:%0A%0A` +
-      `*Detail Booking*%0A` +
-      `*Tipe Booking:* ${bookingForm.booking_type === 'package' ? 'Paket Wisata' : 'Sewa Mobil'}%0A` +
-      `*Paket/Kendaraan:* ${bookingForm.item_name}%0A` +
-      `*Jumlah Peserta/Durasi:* ${bookingForm.duration}%0A` +
-      `*Harga:* ${bookingForm.total_price}%0A%0A` +
-      `*Data Pemesan:*%0A` +
-      `Nama: ${bookingForm.name}%0A` +
-      `Email: ${bookingForm.email}%0A` +
-      `WhatsApp: ${bookingForm.phone}%0A` +
-      `Tanggal: ${bookingForm.date}%0A%0A` +
-      `${bookingForm.notes ? `*Catatan:*%0A${bookingForm.notes}%0A%0A` : ''}` +
-      `Mohon konfirmasi ketersediaan dan informasi mengenai proses pembayaran serta langkah selanjutnya.%0A%0A` +
-      `Terima kasih. Saya tunggu balasannya.`;
-    
-    // Nomor WhatsApp admin (ganti dengan nomor Anda)
-    const whatsappNumber = '6281243499265'; // Format: 62xxx (tanpa + atau 0)
-    
+
     try {
       setBookingLoading(true);
       const cleanPhone = bookingForm.phone.replace(/\D/g, '');
       const notesWithDetails = `Tipe: ${bookingForm.booking_type === 'package' ? 'Paket Wisata' : 'Sewa Mobil'}\nItem: ${bookingForm.item_name}\nJumlah/Durasi: ${bookingForm.duration}\nTanggal: ${bookingForm.date}\nHarga: ${bookingForm.total_price}\nCatatan: ${bookingForm.notes}`;
-      
-      // Original Customer insert
+
+      // Insert customer record
       const { error: custErr } = await supabase.from('customers').insert({
         full_name: bookingForm.name,
         phone: cleanPhone,
@@ -293,38 +279,85 @@ export default function Home() {
       });
       if (custErr) throw custErr;
 
-      // NEW Bookings insert
-      const { error: bookingErr } = await supabase.from('bookings').insert({
-        name: bookingForm.name,
-        email: bookingForm.email,
-        phone: cleanPhone,
-        booking_type: bookingForm.booking_type,
-        item_name: bookingForm.item_name,
-        date: bookingForm.date,
-        duration: bookingForm.duration,
-        notes: bookingForm.notes,
-        total_price: bookingForm.total_price,
-        status: 'pending'
-      });
+      // Insert booking record — get back the ID
+      const { data: bookingData, error: bookingErr } = await supabase
+        .from('bookings')
+        .insert({
+          name: bookingForm.name,
+          email: bookingForm.email,
+          phone: cleanPhone,
+          booking_type: bookingForm.booking_type,
+          item_name: bookingForm.item_name,
+          date: bookingForm.date,
+          duration: bookingForm.duration,
+          notes: bookingForm.notes,
+          total_price: bookingForm.total_price,
+          status: 'pending',
+          payment_status: 'unpaid',
+        })
+        .select('id')
+        .single();
       if (bookingErr) throw bookingErr;
 
+      setPendingBookingId(bookingData.id);
+      setPaymentStep('confirm');
       setBookingSuccess(true);
     } catch (err) {
-      console.error("Gagal menyimpan data booking ke database:", err);
+      console.error('Gagal menyimpan data booking ke database:', err);
     } finally {
       setBookingLoading(false);
     }
+  };
 
-    // Redirect ke WhatsApp
-    window.open(`https://wa.me/${whatsappNumber}?text=${message}`, '_blank');
-    
-    // Reset form
+  const handlePayNow = async () => {
+    if (!pendingBookingId) return;
+    setPaymentStep('processing');
+    try {
+      // Get snap token from our API
+      const res = await fetch('/api/payment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ booking_id: pendingBookingId }),
+      });
+      const { snap_token, error } = await res.json();
+      if (!res.ok || !snap_token) throw new Error(error || 'Failed to get snap token');
+
+      // Open Midtrans Snap popup
+      await openSnapPayment(snap_token, {
+        onSuccess: () => {
+          setPaymentStep('success');
+          resetBookingForm();
+        },
+        onPending: () => {
+          setPaymentStep('pending');
+          resetBookingForm();
+        },
+        onError: () => {
+          setPaymentStep('failed');
+        },
+        onClose: () => {
+          // User closed popup without finishing — treat as pending
+          setPaymentStep('pending');
+        },
+      });
+    } catch (err) {
+      console.error('Payment error:', err);
+      setPaymentStep('failed');
+    }
+  };
+
+  const resetBookingForm = () => {
     setBookingForm({ name: '', email: '', phone: '', item_name: '', booking_type: 'package', date: '', duration: '', notes: '', total_price: '' });
     setSelectedPkgId('');
     setSelectedHotelIdx(0);
     setSelectedPaxKey('');
     setSelectedCarId('');
     setTimeout(() => setBookingSuccess(false), 5000);
+  };
+
+  const handleClosePaymentModal = () => {
+    setPaymentStep('closed');
+    setPendingBookingId(null);
   };
 
   const selectPackage = (pkg: TourPackage, hotel: string, pax: string, price: number) => {
@@ -352,7 +385,7 @@ export default function Home() {
       <Hero />
 
       {/* Why Choose Us */}
-      <section className="py-28 relative overflow-hidden" style={{background: 'linear-gradient(135deg, #f0f9ff 0%, #fefcf3 50%, #f0fdfa 100%)'}}>
+      <section className="py-28 relative overflow-hidden" style={{ background: 'linear-gradient(135deg, #f0f9ff 0%, #fefcf3 50%, #f0fdfa 100%)' }}>
         {/* Background decoration */}
         <div className="absolute top-0 right-0 w-96 h-96 bg-toska-100/50 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3 pointer-events-none" />
         <div className="absolute bottom-0 left-0 w-72 h-72 bg-ocean-100/50 rounded-full blur-3xl translate-y-1/2 -translate-x-1/3 pointer-events-none" />
@@ -363,8 +396,8 @@ export default function Home() {
               {locale === 'id' ? 'Kenapa Pilih Kami?' : 'Why Choose Us?'}
             </h2>
             <p className="text-ocean-600 max-w-2xl mx-auto leading-relaxed">
-              {locale === 'id' 
-                ? 'Kami berkomitmen memberikan pengalaman wisata terbaik dengan layanan profesional dan harga terjangkau' 
+              {locale === 'id'
+                ? 'Kami berkomitmen memberikan pengalaman wisata terbaik dengan layanan profesional dan harga terjangkau'
                 : 'We are committed to providing the best travel experience with professional service and affordable prices'}
             </p>
           </motion.div>
@@ -414,11 +447,10 @@ export default function Home() {
               <button
                 key={cat}
                 onClick={() => setActiveCategory(cat)}
-                className={`px-5 py-2.5 rounded-full text-sm font-medium transition-all ${
-                  activeCategory === cat
+                className={`px-5 py-2.5 rounded-full text-sm font-medium transition-all ${activeCategory === cat
                     ? 'bg-toska-500 text-white shadow-lg shadow-toska-500/25'
                     : 'bg-ocean-50 text-ocean-700 hover:bg-ocean-100'
-                }`}
+                  }`}
               >
                 {cat === 'Semua' ? t('all') : cat === 'Honeymoon' ? '💕 Honeymoon' : cat === '3D2N' ? '🌴 ' + translateText('3 Hari 2 Malam') : translateText(cat)}
               </button>
@@ -428,12 +460,12 @@ export default function Home() {
           {/* Packages Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {filteredPackages.map((pkg, index) => (
-              <PackageCard 
-                key={pkg.id} 
-                pkg={pkg} 
+              <PackageCard
+                key={pkg.id}
+                pkg={pkg}
                 index={index}
                 onSelect={(selectedPkg, hotel, pax, price) => {
-                  setSelectedPkgId(selectedPkg.id); 
+                  setSelectedPkgId(selectedPkg.id);
                   const hotelIdx = selectedPkg.included?.hotels?.findIndex(h => h.hotel === hotel) ?? -1;
                   setSelectedHotelIdx(hotelIdx >= 0 ? hotelIdx : 0);
                   setSelectedPaxKey(pax);
@@ -514,7 +546,7 @@ export default function Home() {
         {/* Dark gradient background */}
         <div className="absolute inset-0 bg-gradient-to-br from-ocean-900 via-ocean-800 to-[#0a3d5c]" />
         {/* Grid pattern overlay */}
-        <div className="absolute inset-0 opacity-5" style={{backgroundImage: 'linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)', backgroundSize: '40px 40px'}} />
+        <div className="absolute inset-0 opacity-5" style={{ backgroundImage: 'linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
         {/* Glow orbs */}
         <div className="absolute top-0 left-0 w-80 h-80 bg-toska-500/20 rounded-full -translate-x-1/2 -translate-y-1/2 blur-3xl" />
         <div className="absolute bottom-0 right-0 w-80 h-80 bg-ocean-400/15 rounded-full translate-x-1/2 translate-y-1/2 blur-3xl" />
@@ -661,8 +693,8 @@ export default function Home() {
             </h2>
             <p className="text-ocean-600 leading-relaxed">
               {isLoggedIn
-                ? (locale === 'id' 
-                  ? 'Pilih paket atau kendaraan yang Anda inginkan, lalu lengkapi data diri. Tim kami akan segera menghubungi Anda.' 
+                ? (locale === 'id'
+                  ? 'Pilih paket atau kendaraan yang Anda inginkan, lalu lengkapi data diri. Tim kami akan segera menghubungi Anda.'
                   : 'Select the package or vehicle you want, then complete your details. Our team will contact you shortly.')
                 : (locale === 'id'
                   ? 'Silakan masuk atau daftar terlebih dahulu untuk melakukan pemesanan.'
@@ -735,468 +767,319 @@ export default function Home() {
                 </div>
               </motion.div>
 
-          {bookingSuccess && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="bg-green-50 border border-green-200 text-green-800 rounded-xl p-4 mb-10 flex items-center gap-3"
-            >
-              <CheckCircle className="w-5 h-5 text-green-500 shrink-0" />
-              <span className="text-sm font-medium">
-                {locale === 'id'
-                  ? 'Booking berhasil dikirim! Tim kami akan menghubungi Anda dalam 1x24 jam.'
-                  : 'Booking successfully sent! Our team will contact you within 24 hours.'}
-              </span>
-            </motion.div>
-          )}
-
-          <form id="booking-form" onSubmit={handleBooking} className="bg-ocean-50 rounded-2xl p-7 sm:p-10 border border-ocean-100">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-7">
-              {/* Nama */}
-              <div>
-                <label className="block text-sm font-medium text-ocean-800 mb-2">{t('fullName')} *</label>
-                <input
-                  type="text"
-                  required
-                  value={bookingForm.name}
-                  readOnly={!!user?.user_metadata?.full_name}
-                  onChange={e => setBookingForm(p => ({ ...p, name: e.target.value }))}
-                  className={`w-full px-4 py-3 rounded-xl border border-ocean-200 focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm ${user?.user_metadata?.full_name ? 'bg-ocean-100 text-ocean-600 cursor-not-allowed' : 'bg-white'}`}
-                  placeholder={locale === 'id' ? 'Nama Anda' : 'Your Name'}
-                />
-              </div>
-              {/* Email */}
-              <div>
-                <label className="block text-sm font-medium text-ocean-800 mb-2">{t('emailAddress')} *</label>
-                <input
-                  type="email"
-                  required
-                  value={bookingForm.email}
-                  readOnly={!!user?.email}
-                  onChange={e => setBookingForm(p => ({ ...p, email: e.target.value }))}
-                  className={`w-full px-4 py-3 rounded-xl border border-ocean-200 focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm ${user?.email ? 'bg-ocean-100 text-ocean-600 cursor-not-allowed' : 'bg-white'}`}
-                  placeholder="email@contoh.com"
-                />
-              </div>
-              {/* WhatsApp */}
-              <div>
-                <label className="block text-sm font-medium text-ocean-800 mb-2">{t('whatsAppNumber')} *</label>
-                <input
-                  type="tel"
-                  required
-                  pattern="[0-9]*"
-                  inputMode="numeric"
-                  value={bookingForm.phone}
-                  onChange={e => {
-                    const value = e.target.value.replace(/[^0-9]/g, '');
-                    setBookingForm(p => ({ ...p, phone: value }));
-                  }}
-                  onKeyDown={e => {
-                    if ([8, 9, 27, 13, 46, 37, 39].includes(e.keyCode) ||
-                        (e.ctrlKey && [65, 67, 86, 88].includes(e.keyCode))) {
-                      return;
-                    }
-                    if ((e.keyCode < 48 || e.keyCode > 57) &&
-                        (e.keyCode < 96 || e.keyCode > 105)) {
-                      e.preventDefault();
-                    }
-                  }}
-                  className="w-full px-4 py-3 rounded-xl border border-ocean-200 bg-white focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm"
-                  placeholder="08xxxxxxxxxx"
-                />
-                <p className="text-xs text-ocean-500 mt-1.5">{locale === 'id' ? 'Hanya angka yang diperbolehkan' : 'Only numbers allowed'}</p>
-              </div>
-              {/* Tanggal */}
-              <div>
-                <label className="block text-sm font-medium text-ocean-800 mb-2">{bookingForm.booking_type === 'package' ? t('startDateTour') : t('startDateRent')} *</label>
-                <input
-                  type="date"
-                  required
-                  value={bookingForm.date}
-                  onChange={e => setBookingForm(p => ({ ...p, date: e.target.value }))}
-                  className="w-full px-4 py-3 rounded-xl border border-ocean-200 bg-white focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm"
-                />
-              </div>
-
-              {/* Tipe Booking */}
-              <div className="sm:col-span-2">
-                <label className="block text-sm font-medium text-ocean-800 mb-2.5">{t('bookingType')} *</label>
-                <div className="grid grid-cols-2 gap-4">
-                  <button
-                    type="button"
-                    onClick={() => handleBookingTypeChange('package')}
-                    className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold transition-all border ${
-                      bookingForm.booking_type === 'package'
-                        ? 'bg-toska-500 text-white border-toska-500 shadow-md'
-                        : 'bg-white text-ocean-700 border-ocean-200 hover:border-toska-300'
-                    }`}
-                  >
-                    🌴 {t('tourPackages')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleBookingTypeChange('car')}
-                    className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold transition-all border ${
-                      bookingForm.booking_type === 'car'
-                        ? 'bg-toska-500 text-white border-toska-500 shadow-md'
-                        : 'bg-white text-ocean-700 border-ocean-200 hover:border-toska-300'
-                    }`}
-                  >
-                    🚗 {t('carRental')}
-                  </button>
-                </div>
-              </div>
-
-              {/* === PACKAGE BOOKING === */}
-              {bookingForm.booking_type === 'package' && (
-                <>
-                  {/* Pilih Paket */}
-                  <div className="sm:col-span-2">
-                    <label className="block text-sm font-medium text-ocean-800 mb-2">{t('selectTourPackage')} *</label>
-                    <select
-                      required
-                      value={selectedPkgId}
-                      onChange={e => handlePkgChange(e.target.value ? Number(e.target.value) : '')}
-                      className="w-full px-4 py-3 rounded-xl border border-ocean-200 bg-white focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm"
-                    >
-                      <option value="">— {locale === 'id' ? 'Pilih paket' : 'Select package'} —</option>
-                      {packages.map(pkg => (
-                        <option key={pkg.id} value={pkg.id}>{translateText(pkg.name)} ({translateText(pkg.duration)})</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Pilih Hotel */}
-                  {selectedPkg?.included?.hotels && (
-                    <div className="sm:col-span-2">
-                      <label className="block text-sm font-medium text-ocean-800 mb-2.5">{t('selectHotelOption')} *</label>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        {selectedPkg.included.hotels?.map((h, i) => (
-                          <button
-                            key={i}
-                            type="button"
-                            onClick={() => { setSelectedHotelIdx(i); setSelectedPaxKey(''); }}
-                            className={`text-left px-4 py-3 rounded-xl text-sm font-medium transition-all border ${
-                              selectedHotelIdx === i
-                                ? 'bg-ocean-900 text-white border-ocean-900'
-                                : 'bg-white text-ocean-700 border-ocean-200 hover:border-ocean-400'
-                            }`}
-                          >
-                            {h.hotel}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Pilih Jumlah Peserta */}
-                  {selectedPkg && selectedHotel && (
-                    <div className="sm:col-span-2">
-                      <label className="block text-sm font-medium text-ocean-800 mb-2">{t('selectPaxCapacity')} *</label>
-                      <select
-                        required
-                        value={selectedPaxKey}
-                        onChange={e => setSelectedPaxKey(e.target.value)}
-                        className="w-full px-4 py-3 rounded-xl border border-ocean-200 bg-white focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm"
-                      >
-                        <option value="">— {locale === 'id' ? 'Pilih jumlah peserta' : 'Select number of participants'} —</option>
-                        {paxOptions.map(opt => (
-                          <option key={opt.key} value={opt.key}>
-                            {opt.label} — {formatPrice(opt.price)}/{t('pax')}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-
-                  {/* Price Summary */}
-                  {computedPrice > 0 && (
-                    <div className="sm:col-span-2 bg-toska-50 border border-toska-200 rounded-xl p-4 flex items-center justify-between">
-                      <div>
-                        <p className="text-xs text-toska-700 font-medium">{bookingForm.item_name}</p>
-                        <p className="text-xs text-toska-600">{bookingForm.duration}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-xl font-bold text-toska-700">{formatPrice(computedPrice)}</p>
-                        <p className="text-xs text-toska-600">/{selectedPkg?.category === 'Honeymoon' ? t('couple') : t('pax')}</p>
-                      </div>
-                    </div>
-                  )}
-                </>
+              {bookingSuccess && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="bg-green-50 border border-green-200 text-green-800 rounded-xl p-4 mb-10 flex items-center gap-3"
+                >
+                  <CheckCircle className="w-5 h-5 text-green-500 shrink-0" />
+                  <span className="text-sm font-medium">
+                    {locale === 'id'
+                      ? 'Booking berhasil dikirim! Tim kami akan menghubungi Anda dalam 1x24 jam.'
+                      : 'Booking successfully sent! Our team will contact you within 24 hours.'}
+                  </span>
+                </motion.div>
               )}
 
-              {/* === CAR RENTAL BOOKING === */}
-              {bookingForm.booking_type === 'car' && (
-                <>
-                  {/* Tipe Sewa */}
+              <form id="booking-form" onSubmit={handleBooking} className="bg-ocean-50 rounded-2xl p-7 sm:p-10 border border-ocean-100">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-7">
+                  {/* Nama */}
+                  <div>
+                    <label className="block text-sm font-medium text-ocean-800 mb-2">{t('fullName')} *</label>
+                    <input
+                      type="text"
+                      required
+                      value={bookingForm.name}
+                      readOnly={!!user?.user_metadata?.full_name}
+                      onChange={e => setBookingForm(p => ({ ...p, name: e.target.value }))}
+                      className={`w-full px-4 py-3 rounded-xl border border-ocean-200 focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm ${user?.user_metadata?.full_name ? 'bg-ocean-100 text-ocean-600 cursor-not-allowed' : 'bg-white'}`}
+                      placeholder={locale === 'id' ? 'Nama Anda' : 'Your Name'}
+                    />
+                  </div>
+                  {/* Email */}
+                  <div>
+                    <label className="block text-sm font-medium text-ocean-800 mb-2">{t('emailAddress')} *</label>
+                    <input
+                      type="email"
+                      required
+                      value={bookingForm.email}
+                      readOnly={!!user?.email}
+                      onChange={e => setBookingForm(p => ({ ...p, email: e.target.value }))}
+                      className={`w-full px-4 py-3 rounded-xl border border-ocean-200 focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm ${user?.email ? 'bg-ocean-100 text-ocean-600 cursor-not-allowed' : 'bg-white'}`}
+                      placeholder="email@contoh.com"
+                    />
+                  </div>
+                  {/* WhatsApp */}
+                  <div>
+                    <label className="block text-sm font-medium text-ocean-800 mb-2">{t('whatsAppNumber')} *</label>
+                    <input
+                      type="tel"
+                      required
+                      pattern="[0-9]*"
+                      inputMode="numeric"
+                      value={bookingForm.phone}
+                      onChange={e => {
+                        const value = e.target.value.replace(/[^0-9]/g, '');
+                        setBookingForm(p => ({ ...p, phone: value }));
+                      }}
+                      onKeyDown={e => {
+                        if ([8, 9, 27, 13, 46, 37, 39].includes(e.keyCode) ||
+                          (e.ctrlKey && [65, 67, 86, 88].includes(e.keyCode))) {
+                          return;
+                        }
+                        if ((e.keyCode < 48 || e.keyCode > 57) &&
+                          (e.keyCode < 96 || e.keyCode > 105)) {
+                          e.preventDefault();
+                        }
+                      }}
+                      className="w-full px-4 py-3 rounded-xl border border-ocean-200 bg-white focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm"
+                      placeholder="08xxxxxxxxxx"
+                    />
+                    <p className="text-xs text-ocean-500 mt-1.5">{locale === 'id' ? 'Hanya angka yang diperbolehkan' : 'Only numbers allowed'}</p>
+                  </div>
+                  {/* Tanggal */}
+                  <div>
+                    <label className="block text-sm font-medium text-ocean-800 mb-2">{bookingForm.booking_type === 'package' ? t('startDateTour') : t('startDateRent')} *</label>
+                    <input
+                      type="date"
+                      required
+                      value={bookingForm.date}
+                      onChange={e => setBookingForm(p => ({ ...p, date: e.target.value }))}
+                      className="w-full px-4 py-3 rounded-xl border border-ocean-200 bg-white focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm"
+                    />
+                  </div>
+
+                  {/* Tipe Booking */}
                   <div className="sm:col-span-2">
-                    <label className="block text-sm font-medium text-ocean-800 mb-2.5">{t('carType')} *</label>
+                    <label className="block text-sm font-medium text-ocean-800 mb-2.5">{t('bookingType')} *</label>
                     <div className="grid grid-cols-2 gap-4">
                       <button
                         type="button"
-                        onClick={() => { setCarFilterType('self_drive'); setSelectedCarId(''); }}
-                        className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold transition-all border ${
-                          carFilterType === 'self_drive'
+                        onClick={() => handleBookingTypeChange('package')}
+                        className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold transition-all border ${bookingForm.booking_type === 'package'
                             ? 'bg-toska-500 text-white border-toska-500 shadow-md'
                             : 'bg-white text-ocean-700 border-ocean-200 hover:border-toska-300'
-                        }`}
+                          }`}
                       >
-                        🔑 {t('selfDrive')}
+                        🌴 {t('tourPackages')}
                       </button>
                       <button
                         type="button"
-                        onClick={() => { setCarFilterType('with_driver'); setSelectedCarId(''); }}
-                        className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold transition-all border ${
-                          carFilterType === 'with_driver'
+                        onClick={() => handleBookingTypeChange('car')}
+                        className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold transition-all border ${bookingForm.booking_type === 'car'
                             ? 'bg-toska-500 text-white border-toska-500 shadow-md'
                             : 'bg-white text-ocean-700 border-ocean-200 hover:border-toska-300'
-                        }`}
+                          }`}
                       >
-                        👤 {t('withDriver')}
+                        🚗 {t('carRental')}
                       </button>
                     </div>
                   </div>
 
-                  {/* Pilih Kendaraan */}
+                  {/* === PACKAGE BOOKING === */}
+                  {bookingForm.booking_type === 'package' && (
+                    <>
+                      {/* Pilih Paket */}
+                      <div className="sm:col-span-2">
+                        <label className="block text-sm font-medium text-ocean-800 mb-2">{t('selectTourPackage')} *</label>
+                        <select
+                          required
+                          value={selectedPkgId}
+                          onChange={e => handlePkgChange(e.target.value ? Number(e.target.value) : '')}
+                          className="w-full px-4 py-3 rounded-xl border border-ocean-200 bg-white focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm"
+                        >
+                          <option value="">— {locale === 'id' ? 'Pilih paket' : 'Select package'} —</option>
+                          {packages.map(pkg => (
+                            <option key={pkg.id} value={pkg.id}>{translateText(pkg.name)} ({translateText(pkg.duration)})</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Pilih Hotel */}
+                      {selectedPkg?.included?.hotels && (
+                        <div className="sm:col-span-2">
+                          <label className="block text-sm font-medium text-ocean-800 mb-2.5">{t('selectHotelOption')} *</label>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            {selectedPkg.included.hotels?.map((h, i) => (
+                              <button
+                                key={i}
+                                type="button"
+                                onClick={() => { setSelectedHotelIdx(i); setSelectedPaxKey(''); }}
+                                className={`text-left px-4 py-3 rounded-xl text-sm font-medium transition-all border ${selectedHotelIdx === i
+                                    ? 'bg-ocean-900 text-white border-ocean-900'
+                                    : 'bg-white text-ocean-700 border-ocean-200 hover:border-ocean-400'
+                                  }`}
+                              >
+                                {h.hotel}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Pilih Jumlah Peserta */}
+                      {selectedPkg && selectedHotel && (
+                        <div className="sm:col-span-2">
+                          <label className="block text-sm font-medium text-ocean-800 mb-2">{t('selectPaxCapacity')} *</label>
+                          <select
+                            required
+                            value={selectedPaxKey}
+                            onChange={e => setSelectedPaxKey(e.target.value)}
+                            className="w-full px-4 py-3 rounded-xl border border-ocean-200 bg-white focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm"
+                          >
+                            <option value="">— {locale === 'id' ? 'Pilih jumlah peserta' : 'Select number of participants'} —</option>
+                            {paxOptions.map(opt => (
+                              <option key={opt.key} value={opt.key}>
+                                {opt.label} — {formatPrice(opt.price)}/{t('pax')}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      {/* Price Summary */}
+                      {computedPrice > 0 && (
+                        <div className="sm:col-span-2 bg-toska-50 border border-toska-200 rounded-xl p-4 flex items-center justify-between">
+                          <div>
+                            <p className="text-xs text-toska-700 font-medium">{bookingForm.item_name}</p>
+                            <p className="text-xs text-toska-600">{bookingForm.duration}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-xl font-bold text-toska-700">{formatPrice(computedPrice)}</p>
+                            <p className="text-xs text-toska-600">/{selectedPkg?.category === 'Honeymoon' ? t('couple') : t('pax')}</p>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {/* === CAR RENTAL BOOKING === */}
+                  {bookingForm.booking_type === 'car' && (
+                    <>
+                      {/* Tipe Sewa */}
+                      <div className="sm:col-span-2">
+                        <label className="block text-sm font-medium text-ocean-800 mb-2.5">{t('carType')} *</label>
+                        <div className="grid grid-cols-2 gap-4">
+                          <button
+                            type="button"
+                            onClick={() => { setCarFilterType('self_drive'); setSelectedCarId(''); }}
+                            className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold transition-all border ${carFilterType === 'self_drive'
+                                ? 'bg-toska-500 text-white border-toska-500 shadow-md'
+                                : 'bg-white text-ocean-700 border-ocean-200 hover:border-toska-300'
+                              }`}
+                          >
+                            🔑 {t('selfDrive')}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => { setCarFilterType('with_driver'); setSelectedCarId(''); }}
+                            className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold transition-all border ${carFilterType === 'with_driver'
+                                ? 'bg-toska-500 text-white border-toska-500 shadow-md'
+                                : 'bg-white text-ocean-700 border-ocean-200 hover:border-toska-300'
+                              }`}
+                          >
+                            👤 {t('withDriver')}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Pilih Kendaraan */}
+                      <div className="sm:col-span-2">
+                        <label className="block text-sm font-medium text-ocean-800 mb-2">{t('selectCarRental')} *</label>
+                        <select
+                          required
+                          value={selectedCarId}
+                          onChange={e => setSelectedCarId(e.target.value ? Number(e.target.value) : '')}
+                          className="w-full px-4 py-3 rounded-xl border border-ocean-200 bg-white focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm"
+                        >
+                          <option value="">— {locale === 'id' ? 'Pilih kendaraan' : 'Select vehicle'} —</option>
+                          {filteredCars.map(car => (
+                            <option key={car.id} value={car.id}>
+                              {translateText(car.name)} ({car.seats} Seat) — {formatPrice(car.price)} / {translateText(car.duration_desc)}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Durasi Sewa */}
+                      {selectedCar && (
+                        <div>
+                          <label className="block text-sm font-medium text-ocean-800 mb-2">{t('rentDuration')}</label>
+                          <input
+                            type="text"
+                            value={bookingForm.duration}
+                            onChange={e => setBookingForm(p => ({ ...p, duration: e.target.value }))}
+                            className="w-full px-4 py-3 rounded-xl border border-ocean-200 bg-white focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm"
+                            placeholder={locale === 'id' ? 'Contoh: 2 hari' : 'Example: 2 days'}
+                          />
+                        </div>
+                      )}
+
+                      {/* Price Summary */}
+                      {selectedCar && (
+                        <div className={`${selectedCar ? '' : 'sm:col-span-2'} bg-toska-50 border border-toska-200 rounded-xl p-4 flex items-center justify-between ${selectedCar ? 'sm:col-span-1' : ''}`}>
+                          <div>
+                            <p className="text-xs text-toska-700 font-medium">{translateText(selectedCar.name)}</p>
+                            <p className="text-xs text-toska-600">{selectedCar.seats} Seat · {translateText(selectedCar.duration_desc)}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-xl font-bold text-toska-700">{formatPrice(selectedCar.price)}</p>
+                            <p className="text-xs text-toska-600">{translateText(selectedCar.duration_desc)}</p>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {/* Catatan */}
                   <div className="sm:col-span-2">
-                    <label className="block text-sm font-medium text-ocean-800 mb-2">{t('selectCarRental')} *</label>
-                    <select
-                      required
-                      value={selectedCarId}
-                      onChange={e => setSelectedCarId(e.target.value ? Number(e.target.value) : '')}
-                      className="w-full px-4 py-3 rounded-xl border border-ocean-200 bg-white focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm"
-                    >
-                      <option value="">— {locale === 'id' ? 'Pilih kendaraan' : 'Select vehicle'} —</option>
-                      {filteredCars.map(car => (
-                        <option key={car.id} value={car.id}>
-                          {translateText(car.name)} ({car.seats} Seat) — {formatPrice(car.price)} / {translateText(car.duration_desc)}
-                        </option>
-                      ))}
-                    </select>
+                    <label className="block text-sm font-medium text-ocean-800 mb-2">{t('additionalNotes')}</label>
+                    <textarea
+                      rows={3}
+                      value={bookingForm.notes}
+                      onChange={e => setBookingForm(p => ({ ...p, notes: e.target.value }))}
+                      className="w-full px-4 py-3 rounded-xl border border-ocean-200 bg-white focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm resize-none"
+                      placeholder={locale === 'id' ? 'Permintaan khusus, preferensi, dll.' : 'Special requests, preferences, etc.'}
+                    />
                   </div>
-
-                  {/* Durasi Sewa */}
-                  {selectedCar && (
-                    <div>
-                      <label className="block text-sm font-medium text-ocean-800 mb-2">{t('rentDuration')}</label>
-                      <input
-                        type="text"
-                        value={bookingForm.duration}
-                        onChange={e => setBookingForm(p => ({ ...p, duration: e.target.value }))}
-                        className="w-full px-4 py-3 rounded-xl border border-ocean-200 bg-white focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm"
-                        placeholder={locale === 'id' ? 'Contoh: 2 hari' : 'Example: 2 days'}
-                      />
-                    </div>
+                </div>
+                <button
+                  type="submit"
+                  disabled={bookingLoading}
+                  className="w-full mt-10 bg-toska-500 hover:bg-toska-600 disabled:bg-toska-300 text-white py-4 rounded-xl font-semibold text-lg transition-all hover:shadow-lg hover:shadow-toska-500/25 flex items-center justify-center gap-2"
+                >
+                  {bookingLoading ? (
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <CreditCard className="w-5 h-5" />
+                      {isLoggedIn ? (locale === 'id' ? 'Lanjut ke Pembayaran' : 'Proceed to Payment') : t('bookingNow')}
+                    </>
                   )}
-
-                  {/* Price Summary */}
-                  {selectedCar && (
-                    <div className={`${selectedCar ? '' : 'sm:col-span-2'} bg-toska-50 border border-toska-200 rounded-xl p-4 flex items-center justify-between ${selectedCar ? 'sm:col-span-1' : ''}`}>
-                      <div>
-                        <p className="text-xs text-toska-700 font-medium">{translateText(selectedCar.name)}</p>
-                        <p className="text-xs text-toska-600">{selectedCar.seats} Seat · {translateText(selectedCar.duration_desc)}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-xl font-bold text-toska-700">{formatPrice(selectedCar.price)}</p>
-                        <p className="text-xs text-toska-600">{translateText(selectedCar.duration_desc)}</p>
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-
-              {/* Catatan */}
-              <div className="sm:col-span-2">
-                <label className="block text-sm font-medium text-ocean-800 mb-2">{t('additionalNotes')}</label>
-                <textarea
-                  rows={3}
-                  value={bookingForm.notes}
-                  onChange={e => setBookingForm(p => ({ ...p, notes: e.target.value }))}
-                  className="w-full px-4 py-3 rounded-xl border border-ocean-200 bg-white focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm resize-none"
-                  placeholder={locale === 'id' ? 'Permintaan khusus, preferensi, dll.' : 'Special requests, preferences, etc.'}
-                />
-              </div>
-            </div>
-            <button
-              type="submit"
-              disabled={bookingLoading}
-              className="w-full mt-10 bg-toska-500 hover:bg-toska-600 disabled:bg-toska-300 text-white py-4 rounded-xl font-semibold text-lg transition-all hover:shadow-lg hover:shadow-toska-500/25 flex items-center justify-center gap-2"
-            >
-              {bookingLoading ? (
-                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <>
-                  <Send className="w-5 h-5" />
-                  {t('bookingNow')}
-                </>
-              )}
-            </button>
-          </form>
+                </button>
+              </form>
             </>
           )}
         </div>
       </section>
 
-      {/* Syarat & Kebijakan Section */}
-      <section className="py-24 relative overflow-hidden" style={{ background: 'linear-gradient(135deg, #fefcf3 0%, #f0fdfa 50%, #f0f9ff 100%)' }}>
-        {/* Background decoration */}
-        <div className="absolute top-1/2 left-0 w-96 h-96 bg-ocean-100/40 rounded-full blur-3xl -translate-y-1/2 -translate-x-1/2 pointer-events-none" />
-        <div className="absolute top-1/3 right-0 w-96 h-96 bg-toska-100/40 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
 
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.6 }}
-            className="text-center mb-16"
-          >
-            <span className="inline-block text-toska-600 font-semibold text-sm uppercase tracking-widest mb-3 bg-toska-50 border border-toska-200 px-4 py-1.5 rounded-full">
-              {locale === 'id' ? 'Legalitas & Aturan' : 'Legal & Rules'}
-            </span>
-            <h2 className="text-3xl sm:text-4xl font-bold text-ocean-900 font-[family-name:var(--font-display)] mb-4">
-              {locale === 'id' ? 'Syarat, Ketentuan & Kebijakan' : 'Terms, Conditions & Policies'}
-            </h2>
-            <p className="text-ocean-600 max-w-2xl mx-auto leading-relaxed text-sm sm:text-base">
-              {locale === 'id'
-                ? 'Informasi penting mengenai aturan penggunaan layanan kami dan bagaimana kami melindungi data pribadi Anda.'
-                : 'Important information regarding the rules of using our services and how we protect your personal data.'}
-            </p>
-          </motion.div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
-            {/* Card 1: Syarat & Ketentuan */}
-            <motion.div
-              id="syarat-ketentuan"
-              initial={{ opacity: 0, x: -40 }}
-              whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.7 }}
-              className="scroll-mt-28 bg-white rounded-3xl p-8 sm:p-10 shadow-sm hover:shadow-xl border border-ocean-100/80 hover:-translate-y-1 transition-all duration-300 group"
-            >
-              <div className="flex items-center gap-4 mb-8">
-                <div className="w-12 h-12 bg-toska-50 rounded-2xl flex items-center justify-center text-toska-500 group-hover:scale-110 transition-transform duration-300">
-                  <FileText className="w-6 h-6" />
-                </div>
-                <div>
-                  <h3 className="text-2xl font-bold text-ocean-900 font-[family-name:var(--font-display)]">
-                    {t('termsTitle')}
-                  </h3>
-                  <p className="text-xs text-ocean-400 mt-0.5">{t('termsSubtitle')}</p>
-                </div>
-              </div>
-
-              <div className="space-y-6">
-                {/* Section A: Pembayaran */}
-                <div>
-                  <h4 className="font-semibold text-ocean-900 flex items-center gap-2 mb-3 text-base">
-                    <span className="w-1.5 h-1.5 rounded-full bg-toska-500" />
-                    {t('termsPaymentTitle')}
-                  </h4>
-                  <ul className="space-y-2.5 pl-3.5 text-sm text-ocean-600 leading-relaxed list-disc marker:text-toska-400">
-                    <li>{t('termsPayment1')}</li>
-                    <li>{t('termsPayment2')}</li>
-                  </ul>
-                </div>
-
-                {/* Section B: Pembatalan */}
-                <div>
-                  <h4 className="font-semibold text-ocean-900 flex items-center gap-2 mb-3 text-base">
-                    <span className="w-1.5 h-1.5 rounded-full bg-toska-500" />
-                    {t('termsCancelTitle')}
-                  </h4>
-                  <ul className="space-y-2.5 pl-3.5 text-sm text-ocean-600 leading-relaxed list-disc marker:text-toska-400">
-                    <li>{t('termsCancel1')}</li>
-                    <li>{t('termsCancel2')}</li>
-                    <li>{t('termsCancel3')}</li>
-                  </ul>
-                </div>
-
-                {/* Section C: Persyaratan Sewa */}
-                <div>
-                  <h4 className="font-semibold text-ocean-900 flex items-center gap-2 mb-3 text-base">
-                    <span className="w-1.5 h-1.5 rounded-full bg-toska-500" />
-                    {t('termsRentalTitle')}
-                  </h4>
-                  <ul className="space-y-2.5 pl-3.5 text-sm text-ocean-600 leading-relaxed list-disc marker:text-toska-400">
-                    <li>{t('termsRental1')}</li>
-                    <li>{t('termsRental2')}</li>
-                    <li>{t('termsRental3')}</li>
-                  </ul>
-                </div>
-              </div>
-            </motion.div>
-
-            {/* Card 2: Kebijakan Privasi */}
-            <motion.div
-              id="kebijakan-privasi"
-              initial={{ opacity: 0, x: 40 }}
-              whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.7 }}
-              className="scroll-mt-28 bg-white rounded-3xl p-8 sm:p-10 shadow-sm hover:shadow-xl border border-ocean-100/80 hover:-translate-y-1 transition-all duration-300 group"
-            >
-              <div className="flex items-center gap-4 mb-8">
-                <div className="w-12 h-12 bg-ocean-50 rounded-2xl flex items-center justify-center text-ocean-600 group-hover:scale-110 transition-transform duration-300">
-                  <Lock className="w-6 h-6" />
-                </div>
-                <div>
-                  <h3 className="text-2xl font-bold text-ocean-900 font-[family-name:var(--font-display)]">
-                    {t('privacyTitle')}
-                  </h3>
-                  <p className="text-xs text-ocean-400 mt-0.5">{t('privacySubtitle')}</p>
-                </div>
-              </div>
-
-              <div className="space-y-6">
-                {/* Section A: Pengumpulan Data */}
-                <div>
-                  <h4 className="font-semibold text-ocean-900 flex items-center gap-2 mb-3 text-base">
-                    <span className="w-1.5 h-1.5 rounded-full bg-ocean-500" />
-                    {t('privacyCollectTitle')}
-                  </h4>
-                  <ul className="space-y-2.5 pl-3.5 text-sm text-ocean-600 leading-relaxed list-disc marker:text-ocean-400">
-                    <li>{t('privacyCollect1')}</li>
-                  </ul>
-                </div>
-
-                {/* Section B: Penggunaan Data */}
-                <div>
-                  <h4 className="font-semibold text-ocean-900 flex items-center gap-2 mb-3 text-base">
-                    <span className="w-1.5 h-1.5 rounded-full bg-ocean-500" />
-                    {t('privacyUsageTitle')}
-                  </h4>
-                  <ul className="space-y-2.5 pl-3.5 text-sm text-ocean-600 leading-relaxed list-disc marker:text-ocean-400">
-                    <li>{t('privacyUsage1')}</li>
-                  </ul>
-                </div>
-
-                {/* Section C: Keamanan Data */}
-                <div>
-                  <h4 className="font-semibold text-ocean-900 flex items-center gap-2 mb-3 text-base">
-                    <span className="w-1.5 h-1.5 rounded-full bg-ocean-500" />
-                    {t('privacySecurityTitle')}
-                  </h4>
-                  <ul className="space-y-2.5 pl-3.5 text-sm text-ocean-600 leading-relaxed list-disc marker:text-ocean-400">
-                    <li>{t('privacySecurity1')}</li>
-                  </ul>
-                </div>
-
-                {/* Section D: Pihak Ketiga */}
-                <div>
-                  <h4 className="font-semibold text-ocean-900 flex items-center gap-2 mb-3 text-base">
-                    <span className="w-1.5 h-1.5 rounded-full bg-ocean-500" />
-                    {t('privacyShareTitle')}
-                  </h4>
-                  <ul className="space-y-2.5 pl-3.5 text-sm text-ocean-600 leading-relaxed list-disc marker:text-ocean-400">
-                    <li>{t('privacyShare1')}</li>
-                  </ul>
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        </div>
-      </section>
+      {/* Payment Modal */}
+      <PaymentModal
+        step={paymentStep}
+        bookingDetails={{
+          itemName: bookingForm.item_name,
+          totalPrice: bookingForm.total_price,
+          name: bookingForm.name,
+          date: bookingForm.date,
+          bookingType: bookingForm.booking_type,
+        }}
+        onConfirm={handlePayNow}
+        onClose={handleClosePaymentModal}
+        locale={locale}
+      />
 
       {/* Footer */}
       <Footer />

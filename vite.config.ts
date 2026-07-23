@@ -21,5 +21,15 @@ export default defineConfig(async ({ mode }) => {
     plugins,
     envPrefix: ['VITE_', 'NEXT_PUBLIC_'],
     define: processEnvDefines,
+    server: {
+      proxy: {
+        // Proxy /api/* to Vercel dev server during local development
+        // Run: vercel dev (in a separate terminal) → starts on port 3000
+        '/api': {
+          target: 'http://localhost:3000',
+          changeOrigin: true,
+        },
+      },
+    },
   };
 })

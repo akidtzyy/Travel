@@ -15,6 +15,7 @@ export default function Navbar() {
   const { user, isLoggedIn, isAdmin, signOut } = useAuth();
   const { t, locale, setLocale } = useI18n();
   const userMenuRef = useRef<HTMLDivElement>(null);
+  const isScrolledOrSubpage = scrolled || location.pathname !== '/';
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20);
@@ -63,15 +64,14 @@ export default function Navbar() {
   ];
 
   return (
-    <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-      scrolled ? 'bg-white/95 backdrop-blur-md shadow-lg' : 'bg-transparent'
-    }`}>
+    <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${isScrolledOrSubpage ? 'bg-white/95 backdrop-blur-md shadow-lg border-b border-ocean-100/50' : 'bg-transparent'
+      }`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 lg:h-20">
           <Link to="/" className="flex items-center gap-2">
-            <Palmtree className={`w-8 h-8 ${scrolled ? 'text-toska-500' : 'text-white'}`} />
-            <span className={`text-xl font-bold font-[family-name:var(--font-display)] ${scrolled ? 'text-ocean-900' : 'text-white'}`}>
-              ClickAndGo
+            <Palmtree className={`w-8 h-8 ${isScrolledOrSubpage ? 'text-toska-500' : 'text-white'}`} />
+            <span className={`text-xl font-bold font-[family-name:var(--font-display)] ${isScrolledOrSubpage ? 'text-ocean-900' : 'text-white'}`}>
+              ClickAndGo Journey
             </span>
           </Link>
 
@@ -82,9 +82,8 @@ export default function Navbar() {
                 <a
                   key={link.label}
                   href={link.href}
-                  className={`text-sm font-medium transition-colors hover:text-toska-400 ${
-                    scrolled ? 'text-ocean-800' : 'text-white/90'
-                  }`}
+                  className={`text-sm font-medium transition-colors hover:text-toska-400 ${isScrolledOrSubpage ? 'text-ocean-800' : 'text-white/90'
+                    }`}
                 >
                   {link.label}
                 </a>
@@ -92,9 +91,8 @@ export default function Navbar() {
                 <Link
                   key={link.label}
                   to={link.href}
-                  className={`text-sm font-medium transition-colors hover:text-toska-400 ${
-                    scrolled ? 'text-ocean-800' : 'text-white/90'
-                  }`}
+                  className={`text-sm font-medium transition-colors hover:text-toska-400 ${isScrolledOrSubpage ? 'text-ocean-800' : 'text-white/90'
+                    }`}
                 >
                   {link.label}
                 </Link>
@@ -104,14 +102,13 @@ export default function Navbar() {
             {/* Dropdown Tentang Kami */}
             <div className="relative group py-2">
               <button
-                className={`flex items-center gap-1 text-sm font-medium transition-colors hover:text-toska-400 focus:outline-none ${
-                  scrolled ? 'text-ocean-800' : 'text-white/90'
-                }`}
+                className={`flex items-center gap-1 text-sm font-medium transition-colors hover:text-toska-400 focus:outline-none ${isScrolledOrSubpage ? 'text-ocean-800' : 'text-white/90'
+                  }`}
               >
                 <span>{locale === 'id' ? 'Tentang Kami' : 'About Us'}</span>
                 <ChevronDown className="w-4 h-4 transition-transform group-hover:rotate-180 duration-300" />
               </button>
-              
+
               <div className="absolute left-0 mt-2 w-56 bg-white border border-ocean-100 rounded-2xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 py-2.5 z-50 transform origin-top -translate-y-1 group-hover:translate-y-0">
                 <a
                   href="/#testimoni"
@@ -126,13 +123,13 @@ export default function Navbar() {
                   {t('faq')}
                 </a>
                 <a
-                  href="/#syarat-ketentuan"
+                  href="/ketentuan-privasi?tab=terms"
                   className="block px-5 py-2.5 text-sm text-ocean-800 hover:bg-toska-50 hover:text-toska-600 transition-colors font-medium"
                 >
                   {t('termsTitle')}
                 </a>
                 <a
-                  href="/#kebijakan-privasi"
+                  href="/ketentuan-privasi?tab=privacy"
                   className="block px-5 py-2.5 text-sm text-ocean-800 hover:bg-toska-50 hover:text-toska-600 transition-colors font-medium"
                 >
                   {t('privacyTitle')}
@@ -153,11 +150,10 @@ export default function Navbar() {
             {/* Language Switcher */}
             <button
               onClick={() => setLocale(locale === 'id' ? 'en' : 'id')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all border ${
-                scrolled
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all border ${isScrolledOrSubpage
                   ? 'text-ocean-700 border-ocean-200 hover:bg-ocean-50'
                   : 'text-white border-white/20 hover:bg-white/10'
-              }`}
+                }`}
               title={locale === 'id' ? 'Switch to English' : 'Ubah ke Bahasa Indonesia'}
             >
               <Globe className="w-3.5 h-3.5 animate-spin-slow" />
@@ -169,11 +165,10 @@ export default function Navbar() {
               <div ref={userMenuRef} className="relative">
                 <button
                   onClick={() => setUserMenuOpen(!userMenuOpen)}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-xl transition-all ${
-                    scrolled
+                  className={`flex items-center gap-2 px-3 py-2 rounded-xl transition-all ${isScrolledOrSubpage
                       ? 'text-ocean-700 hover:bg-ocean-50'
                       : 'text-white/90 hover:bg-white/10'
-                  }`}
+                    }`}
                 >
                   <div className="w-8 h-8 bg-gradient-to-br from-toska-400 to-ocean-500 rounded-full flex items-center justify-center text-white text-sm font-bold shadow-md">
                     {getUserInitial()}
@@ -226,11 +221,10 @@ export default function Navbar() {
             ) : (
               <Link
                 to="/login"
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all border ${
-                  scrolled
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all border ${isScrolledOrSubpage
                     ? 'text-ocean-700 border-ocean-200 hover:border-toska-400 hover:text-toska-600 hover:bg-toska-50'
                     : 'text-white border-white/30 hover:border-white/60 hover:bg-white/10'
-                }`}
+                  }`}
               >
                 <LogIn className="w-4 h-4" />
                 {t('signIn')}
@@ -240,7 +234,7 @@ export default function Navbar() {
 
           <button
             onClick={() => setIsOpen(!isOpen)}
-            className={`lg:hidden p-2 rounded-lg ${scrolled ? 'text-ocean-900' : 'text-white'}`}
+            className={`lg:hidden p-2 rounded-lg ${isScrolledOrSubpage ? 'text-ocean-900' : 'text-white'}`}
           >
             {isOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
           </button>
@@ -285,7 +279,7 @@ export default function Navbar() {
                   <span>{locale === 'id' ? 'Tentang Kami' : 'About Us'}</span>
                   <ChevronDown className={`w-4 h-4 transition-transform duration-300 ${mobileAboutOpen ? 'rotate-180' : ''}`} />
                 </button>
-                
+
                 {mobileAboutOpen && (
                   <div className="pl-4 space-y-1 bg-ocean-50/50 rounded-lg py-1">
                     <a
@@ -303,14 +297,14 @@ export default function Navbar() {
                       {t('faq')}
                     </a>
                     <a
-                      href="/#syarat-ketentuan"
+                      href="/ketentuan-privasi?tab=terms"
                       onClick={() => setIsOpen(false)}
                       className="block px-4 py-2.5 text-sm text-ocean-700 hover:bg-ocean-50 rounded-lg font-medium"
                     >
                       {t('termsTitle')}
                     </a>
                     <a
-                      href="/#kebijakan-privasi"
+                      href="/ketentuan-privasi?tab=privacy"
                       onClick={() => setIsOpen(false)}
                       className="block px-4 py-2.5 text-sm text-ocean-700 hover:bg-ocean-50 rounded-lg font-medium"
                     >
@@ -330,21 +324,19 @@ export default function Navbar() {
               <div className="flex gap-2 mt-4 pt-4 border-t border-ocean-100">
                 <button
                   onClick={() => setLocale('id')}
-                  className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all border ${
-                    locale === 'id'
+                  className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all border ${locale === 'id'
                       ? 'bg-toska-50 text-toska-600 border-toska-200'
                       : 'text-ocean-500 border-ocean-100'
-                  }`}
+                    }`}
                 >
                   🇮🇩 {t('indonesian')}
                 </button>
                 <button
                   onClick={() => setLocale('en')}
-                  className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all border ${
-                    locale === 'en'
+                  className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all border ${locale === 'en'
                       ? 'bg-toska-50 text-toska-600 border-toska-200'
                       : 'text-ocean-500 border-ocean-100'
-                  }`}
+                    }`}
                 >
                   🇬🇧 {t('english')}
                 </button>

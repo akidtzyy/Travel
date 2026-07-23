@@ -5,6 +5,7 @@ import Navbar from './components/Navbar';
 import Home from './pages/Home';
 import CarRental from './pages/CarRental';
 import UserAuth from './pages/UserAuth';
+import Legal from './pages/Legal';
 import AdminLogin from './pages/admin/AdminLogin';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import StockManagement from './pages/admin/StockManagement';
@@ -81,6 +82,7 @@ export default function App() {
             {/* Public Routes */}
             <Route path="/" element={<><Navbar /><Home /></>} />
             <Route path="/sewa-mobil" element={<><Navbar /><CarRental /></>} />
+            <Route path="/ketentuan-privasi" element={<Legal />} />
 
             {/* User Auth (Login/Sign Up) */}
             <Route path="/login" element={<UserAuthRoute />} />
