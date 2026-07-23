@@ -313,14 +313,28 @@ export default function Home() {
     if (!pendingBookingId) return;
     setPaymentStep('processing');
     try {
-      // Get snap token from our API
+      // Get snap token from our API — pass booking details directly
+      // so server doesn't need to re-fetch from Supabase (avoids service_role key requirement)
       const res = await fetch('/api/payment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ booking_id: pendingBookingId }),
+        body: JSON.stringify({
+          booking_id: pendingBookingId,
+          name: bookingForm.name,
+          email: bookingForm.email,
+          phone: bookingForm.phone,
+          item_name: bookingForm.item_name,
+          total_price: bookingForm.total_price,
+          booking_type: bookingForm.booking_type,
+        }),
       });
-      const { snap_token, error } = await res.json();
-      if (!res.ok || !snap_token) throw new Error(error || 'Failed to get snap token');
+      const responseData = await res.json();
+      const { snap_token, error, details } = responseData;
+
+      if (!res.ok || !snap_token) {
+        console.error('Payment API error:', error, details);
+        throw new Error(error || 'Gagal mendapatkan token pembayaran');
+      }
 
       // Open Midtrans Snap popup
       await openSnapPayment(snap_token, {
@@ -345,6 +359,7 @@ export default function Home() {
       setPaymentStep('failed');
     }
   };
+
 
   const resetBookingForm = () => {
     setBookingForm({ name: '', email: '', phone: '', item_name: '', booking_type: 'package', date: '', duration: '', notes: '', total_price: '' });
