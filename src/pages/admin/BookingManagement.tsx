@@ -4,7 +4,8 @@ import {
   CalendarCheck, Search, Filter,
   User, FileText, Check, X, AlertCircle, Eye, Trash2, Printer,
   DollarSign, ChevronLeft, ChevronRight, RefreshCw, Palmtree, Car,
-  MessageCircle, Download, Plus, Upload, Image as ImageIcon, ExternalLink
+  MessageCircle, Download, Plus, Upload, Image as ImageIcon, ExternalLink,
+  MoreVertical
 } from 'lucide-react';
 import { useI18n } from '../../lib/I18nContext';
 import supabase from '../../lib/supabase';
@@ -129,6 +130,10 @@ export default function BookingManagement() {
   const hideEntireUploadSection = isVerified || 
     (addForm.booking_type === 'package' && hasKtpInDb) ||
     (addForm.booking_type === 'car' && hasKtpInDb && hasSimInDb);
+
+  // Actions dropdown & cancel confirmation states
+  const [activeDropdownId, setActiveDropdownId] = useState<number | null>(null);
+  const [cancelConfirmId, setCancelConfirmId] = useState<number | null>(null);
 
   // Reschedule Modal states
   const [showRescheduleModal, setShowRescheduleModal] = useState(false);
@@ -1081,130 +1086,135 @@ export default function BookingManagement() {
                         {getPaymentStatusLabel(b.payment_status || 'unpaid')}
                       </span>
                     </td>
-                    <td className="px-6 py-4.5 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
+                    <td className="px-6 py-4.5 text-right w-36 min-w-[9rem]">
+                      <div className="flex items-center justify-end gap-2 relative">
+                        {/* Primary Button */}
                         <button
                           onClick={() => { setSelectedBooking(b); setShowDetailModal(true); }}
-                          title={t('bookingDetails')}
-                          className="p-1.5 text-slate-500 hover:text-toska-600 hover:bg-toska-50 rounded-lg transition-all"
+                          className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-all hover:scale-105 active:scale-95"
                         >
-                          <Eye className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => { setSelectedBooking(b); setShowInvoiceModal(true); }}
-                          title={t('printInvoice')}
-                          className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                        >
-                          <Printer className="w-4 h-4" />
+                          <Eye className="w-3.5 h-3.5" />
+                          {locale === 'id' ? 'Detail' : 'Detail'}
                         </button>
 
-                        {/* Reschedule Booking */}
-                        {(b.status === 'pending' || b.status === 'confirmed' || b.status === 'rescheduled') && (
+                        {/* Kebab More Options Button */}
+                        <div className="relative">
                           <button
-                            onClick={() => {
-                              setRescheduleBooking(b);
-                              setNewRescheduleDate(b.date);
-                              setRescheduleNotes(b.reschedule_notes || '');
-                              setShowRescheduleModal(true);
-                            }}
-                            title="Reschedule Booking"
-                            className="p-1.5 text-slate-500 hover:text-toska-600 hover:bg-toska-50 rounded-lg transition-all"
+                            onClick={() => setActiveDropdownId(activeDropdownId === b.id ? null : b.id)}
+                            className={`p-1.5 rounded-xl border transition-all ${activeDropdownId === b.id ? 'bg-slate-100 border-slate-300 text-slate-800 scale-105' : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-500'}`}
                           >
-                            <RefreshCw className="w-4 h-4" />
+                            <MoreVertical className="w-4 h-4" />
                           </button>
-                        )}
 
-                        {/* Copy / Generate Payment Link */}
-                        {b.payment_link ? (
-                          <button
-                            onClick={() => {
-                              navigator.clipboard.writeText(b.payment_link!);
-                              showToast('success', locale === 'id' ? 'Link Pembayaran disalin ke clipboard!' : 'Payment Link copied to clipboard!');
-                            }}
-                            title="Salin Link Pembayaran"
-                            className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
-                          >
-                            <ExternalLink className="w-4 h-4" />
-                          </button>
-                        ) : (
-                          b.payment_status !== 'paid' && (
-                            <button
-                              onClick={async () => {
-                                try {
-                                  const res = await fetch('/api/payment', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({
-                                      booking_id: b.id,
-                                      name: b.name,
-                                      email: b.email,
-                                      phone: b.phone,
-                                      item_name: b.item_name,
-                                      total_price: b.total_price,
-                                      booking_type: b.booking_type
-                                    })
-                                  });
-                                  const paymentRes = await res.json();
-                                  if (paymentRes.redirect_url) {
-                                    b.payment_link = paymentRes.redirect_url;
-                                    navigator.clipboard.writeText(paymentRes.redirect_url);
-                                    showToast('success', locale === 'id' ? 'Link Pembayaran dibuat & disalin!' : 'Payment Link generated & copied!');
-                                    loadBookings();
-                                  } else {
-                                    showToast('error', locale === 'id' ? 'Gagal membuat link pembayaran' : 'Failed to generate link');
-                                  }
-                                } catch (e) {
-                                  showToast('error', t('errorOccurred'));
-                                }
-                              }}
-                              title="Generate Payment Link"
-                              className="p-1.5 text-slate-500 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-all"
-                            >
-                              <DollarSign className="w-4 h-4" />
-                            </button>
-                          )
-                        )}
+                          {/* Dropdown Menu */}
+                          {activeDropdownId === b.id && (
+                            <>
+                              {/* Invisible overlay to close dropdown on click outside */}
+                              <div
+                                className="fixed inset-0 z-40 cursor-default"
+                                onClick={() => setActiveDropdownId(null)}
+                              />
+                              <div className="absolute right-0 top-full mt-2 w-56 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1.5 text-left animate-in fade-in slide-in-from-top-1 duration-100">
+                                {/* Detail */}
+                                <button
+                                  onClick={() => {
+                                    setSelectedBooking(b);
+                                    setShowDetailModal(true);
+                                    setActiveDropdownId(null);
+                                  }}
+                                  className="w-full px-3.5 py-2 hover:bg-slate-50 text-xs font-medium text-slate-700 flex items-center gap-2 transition-colors"
+                                >
+                                  <Eye className="w-4 h-4 text-slate-400" />
+                                  {locale === 'id' ? 'Lihat Detail' : 'View Details'}
+                                </button>
 
-                        {/* WhatsApp Quick Contact */}
-                        <a
-                          href={`https://wa.me/${b.phone.replace(/\D/g, '')}?text=${encodeURIComponent(`Halo ${b.name}, kami dari ClickAndGo Journey ingin mengkonfirmasi booking Anda untuk ${b.item_name} pada tanggal ${b.date}. Mohon konfirmasinya. Terima kasih!`)}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          title="Hubungi via WhatsApp"
-                          className="p-1.5 text-slate-500 hover:text-green-600 hover:bg-green-50 rounded-lg transition-all"
-                        >
-                          <MessageCircle className="w-4 h-4" />
-                        </a>
+                                {/* Print Invoice */}
+                                <button
+                                  onClick={() => {
+                                    setSelectedBooking(b);
+                                    setShowInvoiceModal(true);
+                                    setActiveDropdownId(null);
+                                  }}
+                                  className="w-full px-3.5 py-2 hover:bg-slate-50 text-xs font-medium text-slate-700 flex items-center gap-2 transition-colors"
+                                >
+                                  <Printer className="w-4 h-4 text-slate-400" />
+                                  {locale === 'id' ? 'Cetak Invoice / Receipt' : 'Print Invoice / Receipt'}
+                                </button>
 
-                        {/* Quick Confirm */}
-                        {b.status === 'pending' && (
-                          <button
-                            onClick={() => updateStatus(b.id, 'confirmed')}
-                            title={t('confirmBooking')}
-                            className="p-1.5 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"
-                          >
-                            <Check className="w-4 h-4" />
-                          </button>
-                        )}
+                                {/* Reschedule (only PENDING, CONFIRMED, RESCHEDULED) */}
+                                {(b.status === 'pending' || b.status === 'confirmed' || b.status === 'rescheduled') && (
+                                  <button
+                                    onClick={() => {
+                                      setRescheduleBooking(b);
+                                      setNewRescheduleDate(b.date);
+                                      setRescheduleNotes(b.reschedule_notes || '');
+                                      setShowRescheduleModal(true);
+                                      setActiveDropdownId(null);
+                                    }}
+                                    className="w-full px-3.5 py-2 hover:bg-slate-50 text-xs font-medium text-slate-700 flex items-center gap-2 transition-colors"
+                                  >
+                                    <RefreshCw className="w-4 h-4 text-slate-400" />
+                                    {locale === 'id' ? 'Reschedule Tanggal' : 'Reschedule Date'}
+                                  </button>
+                                )}
 
-                        {/* Quick Cancel */}
-                        {b.status !== 'cancelled' && b.status !== 'completed' && (
-                          <button
-                            onClick={() => updateStatus(b.id, 'cancelled')}
-                            title={t('cancelBooking')}
-                            className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        )}
+                                {/* WhatsApp Link */}
+                                <a
+                                  href={`https://wa.me/${b.phone.replace(/\D/g, '')}?text=${encodeURIComponent(`Halo ${b.name}, kami dari ClickAndGo Journey ingin mengkonfirmasi booking Anda untuk ${b.item_name} pada tanggal ${b.date}. Mohon konfirmasinya. Terima kasih!`)}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={() => setActiveDropdownId(null)}
+                                  className="w-full px-3.5 py-2 hover:bg-slate-50 text-xs font-medium text-slate-700 flex items-center gap-2 transition-colors"
+                                >
+                                  <MessageCircle className="w-4 h-4 text-slate-400" />
+                                  {locale === 'id' ? 'Hubungi via WhatsApp' : 'Contact via WhatsApp'}
+                                </a>
 
-                        <button
-                          onClick={() => setDeleteConfirm(b.id)}
-                          title={t('deleteItem')}
-                          className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                                {/* Confirm Booking (Active only if status is PENDING) */}
+                                <button
+                                  disabled={b.status !== 'pending'}
+                                  onClick={() => {
+                                    updateStatus(b.id, 'confirmed');
+                                    setActiveDropdownId(null);
+                                  }}
+                                  className={`w-full px-3.5 py-2 text-xs font-medium flex items-center gap-2 transition-colors ${b.status === 'pending' ? 'hover:bg-emerald-50/50 text-emerald-600' : 'text-slate-300 cursor-not-allowed bg-slate-50/10'}`}
+                                >
+                                  <Check className="w-4 h-4" />
+                                  {locale === 'id' ? 'Konfirmasi Booking' : 'Confirm Booking'}
+                                </button>
+
+                                {/* Cancel Booking (PENDING or CONFIRMED) */}
+                                {(b.status === 'pending' || b.status === 'confirmed') && (
+                                  <button
+                                    onClick={() => {
+                                      setCancelConfirmId(b.id);
+                                      setActiveDropdownId(null);
+                                    }}
+                                    className="w-full px-3.5 py-2 hover:bg-red-50 text-xs font-medium text-red-600 flex items-center gap-2 transition-colors"
+                                  >
+                                    <X className="w-4 h-4" />
+                                    {locale === 'id' ? 'Batalkan Booking' : 'Cancel Booking'}
+                                  </button>
+                                )}
+
+                                {/* Divider */}
+                                <div className="border-t border-slate-100 my-1" />
+
+                                {/* Delete Booking (Danger) */}
+                                <button
+                                  onClick={() => {
+                                    setDeleteConfirm(b.id);
+                                    setActiveDropdownId(null);
+                                  }}
+                                  className="w-full px-3.5 py-2 hover:bg-red-50 text-xs font-semibold text-red-600 flex items-center gap-2 transition-colors"
+                                >
+                                  <Trash2 className="w-4 h-4 text-slate-400" />
+                                  {locale === 'id' ? 'Hapus Data' : 'Delete Data'}
+                                </button>
+                              </div>
+                            </>
+                          )}
+                        </div>
                       </div>
                     </td>
                   </tr>
@@ -1280,6 +1290,49 @@ export default function BookingManagement() {
                   className="flex-1 px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-semibold transition-colors"
                 >
                   {t('deleteItem')}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Cancel Confirmation Modal */}
+      <AnimatePresence>
+        {cancelConfirmId !== null && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-2xl p-6 max-w-sm w-full border border-slate-200 shadow-2xl"
+            >
+              <div className="w-12 h-12 bg-red-50 text-red-600 rounded-full flex items-center justify-center mb-4">
+                <X className="w-6 h-6" />
+              </div>
+              <h3 className="text-base font-bold text-slate-900 font-[family-name:var(--font-display)]">
+                {locale === 'id' ? 'Konfirmasi Batalkan' : 'Cancel Booking'}
+              </h3>
+              <p className="text-slate-500 text-sm mt-2">
+                {locale === 'id' 
+                  ? 'Apakah Anda yakin ingin membatalkan pesanan booking ini?' 
+                  : 'Are you sure you want to cancel this booking order?'}
+              </p>
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={() => setCancelConfirmId(null)}
+                  className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition-colors"
+                >
+                  {t('cancelAction')}
+                </button>
+                <button
+                  onClick={() => {
+                    updateStatus(cancelConfirmId, 'cancelled');
+                    setCancelConfirmId(null);
+                  }}
+                  className="flex-1 px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-semibold transition-colors"
+                >
+                  {locale === 'id' ? 'Batalkan Pesanan' : 'Cancel Booking'}
                 </button>
               </div>
             </motion.div>
