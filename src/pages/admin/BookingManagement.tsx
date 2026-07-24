@@ -1836,7 +1836,8 @@ export default function BookingManagement() {
                           <option value="package">{t('tourPackage')}</option>
                           <option value="car">{t('carRental')}</option>
                         </select>
-                                         {addForm.booking_type === 'package' ? (
+                      </div>
+                      {addForm.booking_type === 'package' ? (
                         <>
                           <div>
                             <label className="text-xs font-medium text-slate-600 block mb-1.5">{locale === 'id' ? 'Pilih Paket Wisata' : 'Select Tour Package'} *</label>
@@ -2129,7 +2130,6 @@ export default function BookingManagement() {
                     )}
                   </div>
                 </div>
-              </div>
 
                 {/* Footer Actions */}
                 <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-3">
