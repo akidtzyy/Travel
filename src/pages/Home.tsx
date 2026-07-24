@@ -328,8 +328,8 @@ export default function Home() {
       }
 
       // 2. Upload documents if needed
-      let ktpPassportUrl = profile?.ktp_sim_passport_url || null;
-      let simIdpUrl = null;
+      let ktpPassportUrl = profile?.ktp_passport_url || null;
+      let simIdpUrl = profile?.sim_idp_url || null;
 
       if (!isVerified) {
         if (ktpPassportFile) {
@@ -360,7 +360,8 @@ export default function Home() {
           identity_type: bookingForm.identity_type,
           identity_number: bookingForm.identity_number,
           country_origin: bookingForm.country_origin || null,
-          ...(ktpPassportUrl ? { ktp_sim_passport_url: ktpPassportUrl } : {}),
+          ...(ktpPassportUrl ? { ktp_passport_url: ktpPassportUrl } : {}),
+          ...(simIdpUrl ? { sim_idp_url: simIdpUrl } : {}),
           user_id: user?.id || null,
           updated_at: new Date().toISOString()
         }).eq('id', customerId);
@@ -375,7 +376,8 @@ export default function Home() {
             identity_type: bookingForm.identity_type,
             identity_number: bookingForm.identity_number,
             country_origin: bookingForm.country_origin || null,
-            ktp_sim_passport_url: ktpPassportUrl,
+            ktp_passport_url: ktpPassportUrl,
+            sim_idp_url: simIdpUrl,
             identity_verification_status: 'UNVERIFIED',
             booking_status: 'booked',
             user_id: user?.id || null,
@@ -396,7 +398,8 @@ export default function Home() {
         identity_type: bookingForm.identity_type,
         identity_number: bookingForm.identity_number,
         country_origin: bookingForm.country_origin || null,
-        ktp_sim_passport_url: ktpPassportUrl || null,
+        ktp_passport_url: ktpPassportUrl || null,
+        sim_idp_url: simIdpUrl || null,
         item_name: bookingForm.item_name,
         total_price: bookingForm.total_price,
       };

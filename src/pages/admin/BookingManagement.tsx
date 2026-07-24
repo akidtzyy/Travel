@@ -548,7 +548,8 @@ export default function BookingManagement() {
             identity_type: addForm.identity_type,
             identity_number: addForm.identity_number,
             country_origin: addForm.country_origin || null,
-            ...(ktp_url ? { ktp_sim_passport_url: ktp_url } : {}),
+            ...(ktp_url ? { ktp_passport_url: ktp_url } : {}),
+            ...(sim_url ? { sim_idp_url: sim_url } : {}),
             updated_at: new Date().toISOString()
           }).eq('id', customerId);
         } else {
@@ -560,7 +561,8 @@ export default function BookingManagement() {
             identity_type: addForm.identity_type,
             identity_number: addForm.identity_number,
             country_origin: addForm.country_origin || null,
-            ktp_sim_passport_url: ktp_url || null,
+            ktp_passport_url: ktp_url || null,
+            sim_idp_url: sim_url || null,
             identity_verification_status: 'UNVERIFIED',
             booking_status: 'booked',
             notes: notesWithDetails
@@ -580,7 +582,8 @@ export default function BookingManagement() {
         identity_type: addForm.identity_type,
         identity_number: addForm.identity_number,
         country_origin: addForm.country_origin || null,
-        ktp_sim_passport_url: ktp_url || null,
+        ktp_passport_url: ktp_url || null,
+        sim_idp_url: sim_url || null,
         item_name: addForm.item_name,
         total_price: addForm.total_price,
       };

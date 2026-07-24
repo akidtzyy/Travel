@@ -16,7 +16,8 @@ export interface UserProfile {
   identity_type?: 'NIK' | 'PASSPORT';
   identity_number?: string;
   country_origin?: string;
-  ktp_sim_passport_url?: string;
+  ktp_passport_url?: string;
+  sim_idp_url?: string;
   identity_verification_status?: 'UNVERIFIED' | 'VERIFIED' | 'EXPIRED';
   created_at?: string;
   updated_at?: string;

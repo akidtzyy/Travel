@@ -23,7 +23,8 @@ interface Customer {
   identity_type?: string;
   identity_number?: string;
   country_origin?: string;
-  ktp_sim_passport_url?: string;
+  ktp_passport_url?: string;
+  sim_idp_url?: string;
   identity_verification_status?: string;
   total_bookings?: number;
   total_spent?: number;
@@ -82,11 +83,18 @@ export default function CustomerDatabase() {
     try {
       const docs: { label: string; url: string; booking_info?: string }[] = [];
 
-      // 1. Check customer profile document (KTP / Passport)
-      if (cust.ktp_sim_passport_url) {
+      // 1. Check customer profile documents (KTP/Passport and SIM/IDP)
+      if (cust.ktp_passport_url) {
         docs.push({
-          label: cust.nationality_type === 'WNA' ? 'Dokumen Profil: Paspor' : 'Dokumen Profil: KTP/SIM',
-          url: cust.ktp_sim_passport_url,
+          label: cust.nationality_type === 'WNA' ? 'Dokumen Profil: Paspor (Passport)' : 'Dokumen Profil: KTP/Paspor',
+          url: cust.ktp_passport_url,
+          booking_info: 'Data diunggah via registrasi / update profil'
+        });
+      }
+      if (cust.sim_idp_url) {
+        docs.push({
+          label: cust.nationality_type === 'WNA' ? 'Dokumen Profil: IDP' : 'Dokumen Profil: SIM',
+          url: cust.sim_idp_url,
           booking_info: 'Data diunggah via registrasi / update profil'
         });
       }
