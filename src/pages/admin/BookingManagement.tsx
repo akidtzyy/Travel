@@ -119,6 +119,17 @@ export default function BookingManagement() {
   const [selectedCustKtpPassportUrl, setSelectedCustKtpPassportUrl] = useState<string | null>(null);
   const [selectedCustSimIdpUrl, setSelectedCustSimIdpUrl] = useState<string | null>(null);
 
+  const hasKtpInDb = !!selectedCustKtpPassportUrl;
+  const hasSimInDb = !!selectedCustSimIdpUrl;
+  const isVerified = selectedCustVerificationStatus === 'VERIFIED';
+
+  const hideKtpUpload = isVerified || hasKtpInDb;
+  const hideSimUpload = isVerified || hasSimInDb;
+
+  const hideEntireUploadSection = isVerified || 
+    (addForm.booking_type === 'package' && hasKtpInDb) ||
+    (addForm.booking_type === 'car' && hasKtpInDb && hasSimInDb);
+
   // Reschedule Modal states
   const [showRescheduleModal, setShowRescheduleModal] = useState(false);
   const [rescheduleBooking, setRescheduleBooking] = useState<Booking | null>(null);
@@ -1676,30 +1687,30 @@ export default function BookingManagement() {
                           onChange={e => handleCustomerSearch(e.target.value)}
                           className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-toska-500 text-sm"
                         />
-                      </div>
 
-                      {custSuggestions.length > 0 && (
-                        <div className="absolute z-50 w-[calc(100%-3rem)] mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-48 overflow-y-auto">
-                          {custSuggestions.map(cust => (
-                            <button
-                              key={cust.id}
-                              type="button"
-                              onClick={() => handleSelectCustomer(cust)}
-                              className="w-full text-left px-4 py-2.5 hover:bg-slate-50 border-b border-slate-100 last:border-0 flex items-center justify-between text-xs"
-                            >
-                              <div>
-                                <span className="font-semibold text-slate-800">{cust.full_name}</span>
-                                <span className="text-slate-400 block mt-0.5">{cust.phone} | {cust.email}</span>
-                              </div>
-                              {cust.identity_verification_status === 'VERIFIED' && (
-                                <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded text-[10px] font-bold">
-                                  VERIFIED
-                                </span>
-                              )}
-                            </button>
-                          ))}
-                        </div>
-                      )}
+                        {custSuggestions.length > 0 && (
+                          <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-48 overflow-y-auto left-0 right-0">
+                            {custSuggestions.map(cust => (
+                              <button
+                                key={cust.id}
+                                type="button"
+                                onClick={() => handleSelectCustomer(cust)}
+                                className="w-full text-left px-4 py-2.5 hover:bg-slate-50 border-b border-slate-100 last:border-0 flex items-center justify-between text-xs"
+                              >
+                                <div>
+                                  <span className="font-semibold text-slate-800">{cust.full_name}</span>
+                                  <span className="text-slate-400 block mt-0.5">{cust.phone} | {cust.email}</span>
+                                </div>
+                                {cust.identity_verification_status === 'VERIFIED' && (
+                                  <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded text-[10px] font-bold">
+                                    VERIFIED
+                                  </span>
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
 
                       {selectedCustVerificationStatus === 'VERIFIED' && (
                         <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl flex items-center gap-2 text-xs font-semibold">
@@ -2007,13 +2018,15 @@ export default function BookingManagement() {
                       {locale === 'id' ? 'Upload Dokumen Identitas' : 'Identity Document Upload'}
                     </h4>
 
-                    {selectedCustVerificationStatus === 'VERIFIED' ? (
+                    {hideEntireUploadSection ? (
                       <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl flex items-center gap-3 text-sm font-semibold">
                         <Check className="w-5 h-5 text-emerald-500 shrink-0" />
                         <div>
-                          <p>{locale === 'id' ? 'Identitas Terverifikasi' : 'Verified Customer Profile'}</p>
+                          <p>{locale === 'id' ? 'Dokumen Lengkap' : 'Documents Complete'}</p>
                           <p className="text-xs text-emerald-600 font-normal mt-0.5">
-                            {locale === 'id' ? 'Profil pelanggan ini sudah terverifikasi. Tidak perlu mengupload ulang dokumen KTP/SIM/Paspor.' : 'This customer profile has already been verified. No document upload is required.'}
+                            {locale === 'id' 
+                              ? 'Semua dokumen identitas yang diperlukan sudah tersimpan di database. Anda tidak perlu mengupload ulang dokumen.' 
+                              : 'All required identity documents are already saved in the database. No document upload is required.'}
                           </p>
                         </div>
                       </div>
@@ -2021,69 +2034,61 @@ export default function BookingManagement() {
                       <div className="space-y-4">
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           {/* Document 1: KTP or Paspor */}
-                          <div>
-                            <label className="text-xs font-medium text-slate-600 block mb-1.5 flex items-center justify-between">
-                              <span>
-                                {addForm.nationality_type === 'WNI' ? 'Foto KTP *' : 'Foto Paspor *'}
-                              </span>
-                              {selectedCustKtpPassportUrl && (
-                                <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-bold">
-                                  Sudah ada di database
+                          {!hideKtpUpload && (
+                            <div>
+                              <label className="text-xs font-medium text-slate-600 block mb-1.5 flex items-center justify-between">
+                                <span>
+                                  {addForm.nationality_type === 'WNI' ? 'Foto KTP *' : 'Foto Paspor *'}
                                 </span>
-                              )}
-                            </label>
-                            <p className="text-[11px] text-slate-400 mb-2">
-                              {addForm.nationality_type === 'WNI'
-                                ? (locale === 'id' ? 'Upload foto KTP asli Anda.' : 'Upload your original KTP photo.')
-                                : (locale === 'id' ? 'Upload halaman foto Paspor yang terbaca jelas.' : 'Upload main photo page of Passport.')}
-                            </p>
-                            <div
-                              onClick={() => ktpInputRef.current?.click()}
-                              className="relative border-2 border-dashed border-slate-200 rounded-xl p-4 cursor-pointer hover:border-toska-400 hover:bg-toska-50/30 transition-all group"
-                            >
-                              <input
-                                ref={ktpInputRef}
-                                type="file"
-                                accept="image/jpeg,image/jpg,image/png,image/webp"
-                                onChange={e => handleFileChange(e, 'ktp')}
-                                className="hidden"
-                              />
-                              {ktpPreview ? (
-                                <div className="flex items-center gap-3">
-                                  <img src={ktpPreview} alt="Preview" className="w-20 h-14 object-cover rounded-lg border border-slate-200" />
-                                  <div>
-                                    <p className="text-sm font-semibold text-slate-800">{ktpFile?.name}</p>
-                                    <p className="text-xs text-slate-500 mt-0.5">{ktpFile ? (ktpFile.size / 1024).toFixed(0) + ' KB' : ''}</p>
-                                    <p className="text-[11px] text-toska-500 mt-1">{locale === 'id' ? 'Klik untuk ganti' : 'Click to change'}</p>
+                              </label>
+                              <p className="text-[11px] text-slate-400 mb-2">
+                                {addForm.nationality_type === 'WNI'
+                                  ? (locale === 'id' ? 'Upload foto KTP asli Anda.' : 'Upload your original KTP photo.')
+                                  : (locale === 'id' ? 'Upload halaman foto Paspor yang terbaca jelas.' : 'Upload main photo page of Passport.')}
+                              </p>
+                              <div
+                                onClick={() => ktpInputRef.current?.click()}
+                                className="relative border-2 border-dashed border-slate-200 rounded-xl p-4 cursor-pointer hover:border-toska-400 hover:bg-toska-50/30 transition-all group"
+                              >
+                                <input
+                                  ref={ktpInputRef}
+                                  type="file"
+                                  accept="image/jpeg,image/jpg,image/png,image/webp"
+                                  onChange={e => handleFileChange(e, 'ktp')}
+                                  className="hidden"
+                                />
+                                {ktpPreview ? (
+                                  <div className="flex items-center gap-3">
+                                    <img src={ktpPreview} alt="Preview" className="w-20 h-14 object-cover rounded-lg border border-slate-200" />
+                                    <div>
+                                      <p className="text-sm font-semibold text-slate-800">{ktpFile?.name}</p>
+                                      <p className="text-xs text-slate-500 mt-0.5">{ktpFile ? (ktpFile.size / 1024).toFixed(0) + ' KB' : ''}</p>
+                                      <p className="text-[11px] text-toska-500 mt-1">{locale === 'id' ? 'Klik untuk ganti' : 'Click to change'}</p>
+                                    </div>
                                   </div>
-                                </div>
-                              ) : (
-                                <div className="flex flex-col items-center gap-2 py-2">
-                                  <div className="w-10 h-10 bg-slate-100 group-hover:bg-toska-100 rounded-xl flex items-center justify-center transition-colors">
-                                    <ImageIcon className="w-5 h-5 text-slate-400 group-hover:text-toska-500 transition-colors" />
+                                ) : (
+                                  <div className="flex flex-col items-center gap-2 py-2">
+                                    <div className="w-10 h-10 bg-slate-100 group-hover:bg-toska-100 rounded-xl flex items-center justify-center transition-colors">
+                                      <ImageIcon className="w-5 h-5 text-slate-400 group-hover:text-toska-500 transition-colors" />
+                                    </div>
+                                    <p className="text-sm text-slate-500 group-hover:text-toska-600 transition-colors">
+                                      {addForm.nationality_type === 'WNI'
+                                        ? (locale === 'id' ? 'Klik untuk upload foto KTP' : 'Click to upload KTP photo')
+                                        : (locale === 'id' ? 'Klik untuk upload foto Paspor' : 'Click to upload Passport photo')}
+                                    </p>
                                   </div>
-                                  <p className="text-sm text-slate-500 group-hover:text-toska-600 transition-colors">
-                                    {addForm.nationality_type === 'WNI'
-                                      ? (locale === 'id' ? 'Klik untuk upload foto KTP' : 'Click to upload KTP photo')
-                                      : (locale === 'id' ? 'Klik untuk upload foto Paspor' : 'Click to upload Passport photo')}
-                                  </p>
-                                </div>
-                              )}
+                                )}
+                              </div>
                             </div>
-                          </div>
+                          )}
 
                           {/* Document 2: SIM or IDP (Only for Car Rental) */}
-                          {addForm.booking_type === 'car' && (
+                          {addForm.booking_type === 'car' && !hideSimUpload && (
                             <div>
                               <label className="text-xs font-medium text-slate-600 block mb-1.5 flex items-center justify-between">
                                 <span>
                                   {addForm.nationality_type === 'WNI' ? 'Foto SIM *' : 'International Driving Permit (IDP) *'}
                                 </span>
-                                {selectedCustSimIdpUrl && (
-                                  <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-bold">
-                                    Sudah ada di database
-                                  </span>
-                                )}
                               </label>
                               <p className="text-[11px] text-slate-400 mb-2">
                                 {addForm.nationality_type === 'WNI'
