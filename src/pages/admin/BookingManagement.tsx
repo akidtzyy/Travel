@@ -113,6 +113,8 @@ export default function BookingManagement() {
   const [custSearchQuery, setCustSearchQuery] = useState('');
   const [custSuggestions, setCustSuggestions] = useState<any[]>([]);
   const [selectedCustVerificationStatus, setSelectedCustVerificationStatus] = useState('UNVERIFIED');
+  const [selectedCustKtpPassportUrl, setSelectedCustKtpPassportUrl] = useState<string | null>(null);
+  const [selectedCustSimIdpUrl, setSelectedCustSimIdpUrl] = useState<string | null>(null);
 
   // Reschedule Modal states
   const [showRescheduleModal, setShowRescheduleModal] = useState(false);
@@ -154,6 +156,8 @@ export default function BookingManagement() {
       country_origin: cust.country_origin || '',
     }));
     setSelectedCustVerificationStatus(cust.identity_verification_status || 'UNVERIFIED');
+    setSelectedCustKtpPassportUrl(cust.ktp_passport_url || null);
+    setSelectedCustSimIdpUrl(cust.sim_idp_url || null);
     setCustSearchQuery('');
     setCustSuggestions([]);
   };
@@ -483,6 +487,8 @@ export default function BookingManagement() {
     setCustSearchQuery('');
     setCustSuggestions([]);
     setSelectedCustVerificationStatus('UNVERIFIED');
+    setSelectedCustKtpPassportUrl(null);
+    setSelectedCustSimIdpUrl(null);
     if (ktpInputRef.current) ktpInputRef.current.value = '';
     if (simInputRef.current) simInputRef.current.value = '';
   };
@@ -499,18 +505,18 @@ export default function BookingManagement() {
         if (addForm.nationality_type === 'WNI') {
           // WNI
           if (addForm.booking_type === 'package') {
-            if (!ktpFile) {
+            if (!ktpFile && !selectedCustKtpPassportUrl) {
               showToast('error', locale === 'id' ? 'Foto KTP wajib diunggah!' : 'KTP photo is required!');
               setAddLoading(false);
               return;
             }
           } else if (addForm.booking_type === 'car') {
-            if (!ktpFile) {
+            if (!ktpFile && !selectedCustKtpPassportUrl) {
               showToast('error', locale === 'id' ? 'Foto KTP wajib diunggah!' : 'KTP photo is required!');
               setAddLoading(false);
               return;
             }
-            if (!simFile) {
+            if (!simFile && !selectedCustSimIdpUrl) {
               showToast('error', locale === 'id' ? 'Foto SIM wajib diunggah untuk sewa mobil!' : 'SIM photo is required for car rental!');
               setAddLoading(false);
               return;
@@ -519,18 +525,18 @@ export default function BookingManagement() {
         } else {
           // WNA
           if (addForm.booking_type === 'package') {
-            if (!ktpFile) {
+            if (!ktpFile && !selectedCustKtpPassportUrl) {
               showToast('error', locale === 'id' ? 'Foto Paspor wajib diunggah!' : 'Passport photo is required!');
               setAddLoading(false);
               return;
             }
           } else if (addForm.booking_type === 'car') {
-            if (!ktpFile) {
+            if (!ktpFile && !selectedCustKtpPassportUrl) {
               showToast('error', locale === 'id' ? 'Foto Paspor wajib diunggah!' : 'Passport photo is required!');
               setAddLoading(false);
               return;
             }
-            if (!simFile) {
+            if (!simFile && !selectedCustSimIdpUrl) {
               showToast('error', locale === 'id' ? 'Foto International Driving Permit (IDP) wajib diunggah untuk sewa mobil!' : 'IDP photo is required for car rental!');
               setAddLoading(false);
               return;
@@ -542,10 +548,15 @@ export default function BookingManagement() {
       if (ktpFile) {
         ktp_url = await uploadDoc(ktpFile, addForm.nationality_type === 'WNI' ? 'ktp' : 'passport');
         if (!ktp_url) { showToast('error', t('docUploadError')); setAddLoading(false); return; }
+      } else {
+        ktp_url = selectedCustKtpPassportUrl;
       }
+      
       if (simFile) {
         sim_url = await uploadDoc(simFile, addForm.nationality_type === 'WNI' ? 'sim' : 'idp');
         if (!sim_url) { showToast('error', t('docUploadError')); setAddLoading(false); return; }
+      } else {
+        sim_url = selectedCustSimIdpUrl;
       }
 
       // Find or Create Customer record
@@ -1969,9 +1980,15 @@ export default function BookingManagement() {
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           {/* Document 1: KTP or Paspor */}
                           <div>
-                            <label className="text-xs font-medium text-slate-600 block mb-1.5">
-                              {addForm.nationality_type === 'WNI' ? 'Foto KTP *' : 'Foto Paspor *'}
-                              <span className="ml-1 text-red-500 font-normal">({locale === 'id' ? 'Wajib' : 'Required'})</span>
+                            <label className="text-xs font-medium text-slate-600 block mb-1.5 flex items-center justify-between">
+                              <span>
+                                {addForm.nationality_type === 'WNI' ? 'Foto KTP *' : 'Foto Paspor *'}
+                              </span>
+                              {selectedCustKtpPassportUrl && (
+                                <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-bold">
+                                  Sudah ada di database
+                                </span>
+                              )}
                             </label>
                             <p className="text-[11px] text-slate-400 mb-2">
                               {addForm.nationality_type === 'WNI'
@@ -2016,9 +2033,15 @@ export default function BookingManagement() {
                           {/* Document 2: SIM or IDP (Only for Car Rental) */}
                           {addForm.booking_type === 'car' && (
                             <div>
-                              <label className="text-xs font-medium text-slate-600 block mb-1.5">
-                                {addForm.nationality_type === 'WNI' ? 'Foto SIM *' : 'International Driving Permit (IDP) *'}
-                                <span className="ml-1 text-amber-500 font-normal">({locale === 'id' ? 'Wajib untuk sewa mobil' : 'Required for car rental'})</span>
+                              <label className="text-xs font-medium text-slate-600 block mb-1.5 flex items-center justify-between">
+                                <span>
+                                  {addForm.nationality_type === 'WNI' ? 'Foto SIM *' : 'International Driving Permit (IDP) *'}
+                                </span>
+                                {selectedCustSimIdpUrl && (
+                                  <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-bold">
+                                    Sudah ada di database
+                                  </span>
+                                )}
                               </label>
                               <p className="text-[11px] text-slate-400 mb-2">
                                 {addForm.nationality_type === 'WNI'
