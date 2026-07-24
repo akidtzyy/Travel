@@ -44,6 +44,7 @@ interface AddBookingForm {
   booking_type: 'package' | 'car';
   item_name: string;
   date: string;
+  end_date: string;
   duration: string;
   notes: string;
   total_price: string;
@@ -99,6 +100,7 @@ export default function BookingManagement() {
     booking_type: 'package',
     item_name: '',
     date: '',
+    end_date: '',
     duration: '',
     notes: '',
     total_price: '',
@@ -189,15 +191,38 @@ export default function BookingManagement() {
 
   const selectedCar = useMemo(() => cars.find(c => c.id === selectedCarId), [cars, selectedCarId]);
 
+  // Helper to parse pax multiplier
+  const getPaxMultiplier = (key: string): number => {
+    const num = parseInt(key, 10);
+    return isNaN(num) ? 1 : num;
+  };
+
+  // Helper to calculate rental days
+  const getRentalDays = (start: string, end: string): number => {
+    if (!start || !end) return 1;
+    try {
+      const s = new Date(start);
+      const e = new Date(end);
+      const diffTime = e.getTime() - s.getTime();
+      if (diffTime < 0) return 1;
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+      return diffDays || 1;
+    } catch {
+      return 1;
+    }
+  };
+
   const computedPrice = useMemo(() => {
     if (addForm.booking_type === 'package' && selectedHotel && selectedPaxKey) {
-      return selectedHotel.prices[selectedPaxKey] || 0;
+      const pricePerPax = selectedHotel.prices[selectedPaxKey] || 0;
+      return pricePerPax * getPaxMultiplier(selectedPaxKey);
     }
     if (addForm.booking_type === 'car' && selectedCar) {
-      return selectedCar.price;
+      const days = getRentalDays(addForm.date, addForm.end_date);
+      return selectedCar.price * days;
     }
     return 0;
-  }, [addForm.booking_type, selectedHotel, selectedPaxKey, selectedCar]);
+  }, [addForm.booking_type, selectedHotel, selectedPaxKey, selectedCar, addForm.date, addForm.end_date]);
 
   // Helper to format currency
   const formatPrice = (price: number) => {
@@ -226,10 +251,11 @@ export default function BookingManagement() {
     } else if (addForm.booking_type === 'car') {
       if (selectedCar) {
         const carTypeLabel = selectedCarType === 'self_drive' ? 'Self Drive' : 'With Driver';
+        const days = getRentalDays(addForm.date, addForm.end_date);
         setAddForm(prev => ({
           ...prev,
           item_name: `${selectedCar.name} (${carTypeLabel})`,
-          duration: selectedCar.duration_desc,
+          duration: `${days} Hari`,
           total_price: formatPrice(computedPrice),
         }));
       } else {
@@ -241,7 +267,7 @@ export default function BookingManagement() {
         }));
       }
     }
-  }, [addForm.booking_type, selectedPkg, selectedHotel, selectedPaxKey, selectedCar, selectedCarType, computedPrice, isPaxPricing]);
+  }, [addForm.booking_type, selectedPkg, selectedHotel, selectedPaxKey, selectedCar, selectedCarType, computedPrice, isPaxPricing, addForm.date, addForm.end_date]);
 
   // Reset dropdown selections when booking_type changes
   useEffect(() => {
@@ -466,6 +492,7 @@ export default function BookingManagement() {
       booking_type: 'package',
       item_name: '',
       date: '',
+      end_date: '',
       duration: '',
       notes: '',
       total_price: '',
@@ -631,6 +658,7 @@ export default function BookingManagement() {
         booking_type: addForm.booking_type,
         item_name: addForm.item_name,
         date: addForm.date,
+        end_date: addForm.booking_type === 'car' && addForm.end_date ? addForm.end_date : null,
         duration: addForm.duration,
         notes: addForm.notes,
         total_price: addForm.total_price,
@@ -1801,18 +1829,7 @@ export default function BookingManagement() {
                           <option value="package">{t('tourPackage')}</option>
                           <option value="car">{t('carRental')}</option>
                         </select>
-                      </div>
-                      <div>
-                        <label className="text-xs font-medium text-slate-600 block mb-1.5">{t('date')} *</label>
-                        <input
-                          type="date"
-                          required
-                          value={addForm.date}
-                          onChange={e => setAddForm(p => ({ ...p, date: e.target.value }))}
-                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-toska-500 text-sm text-slate-700"
-                        />
-                      </div>
-                      {addForm.booking_type === 'package' ? (
+                                         {addForm.booking_type === 'package' ? (
                         <>
                           <div>
                             <label className="text-xs font-medium text-slate-600 block mb-1.5">{locale === 'id' ? 'Pilih Paket Wisata' : 'Select Tour Package'} *</label>
@@ -1866,6 +1883,16 @@ export default function BookingManagement() {
                             </select>
                           </div>
                           <div>
+                            <label className="text-xs font-medium text-slate-600 block mb-1.5">{t('date')} *</label>
+                            <input
+                              type="date"
+                              required
+                              value={addForm.date}
+                              onChange={e => setAddForm(p => ({ ...p, date: e.target.value }))}
+                              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-toska-500 text-sm text-slate-700"
+                            />
+                          </div>
+                          <div className="sm:col-span-2">
                             <label className="text-xs font-medium text-slate-600 block mb-1.5">{t('price')} *</label>
                             <input
                               type="text"
@@ -1906,21 +1933,27 @@ export default function BookingManagement() {
                             </select>
                           </div>
                           <div>
-                            <label className="text-xs font-medium text-slate-600 block mb-1.5">{locale === 'id' ? 'Jumlah / Durasi' : 'Duration / Pax'} *</label>
-                            <select
+                            <label className="text-xs font-medium text-slate-600 block mb-1.5">{locale === 'id' ? 'Tanggal Mulai Sewa' : 'Start Date Rent'} *</label>
+                            <input
+                              type="date"
                               required
-                              disabled={!selectedCarId}
-                              value={addForm.duration}
-                              onChange={e => setAddForm(p => ({ ...p, duration: e.target.value }))}
-                              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-toska-500 text-sm text-slate-700 bg-white disabled:opacity-50"
-                            >
-                              <option value="">{locale === 'id' ? '-- Pilih Durasi --' : '-- Select Duration --'}</option>
-                              {selectedCar && (
-                                <option value={selectedCar.duration_desc}>{selectedCar.duration_desc}</option>
-                              )}
-                            </select>
+                              value={addForm.date}
+                              onChange={e => setAddForm(p => ({ ...p, date: e.target.value }))}
+                              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-toska-500 text-sm text-slate-700"
+                            />
                           </div>
                           <div>
+                            <label className="text-xs font-medium text-slate-600 block mb-1.5">{locale === 'id' ? 'Tanggal Selesai Sewa' : 'End Date Rent'} *</label>
+                            <input
+                              type="date"
+                              required
+                              value={addForm.end_date}
+                              onChange={e => setAddForm(p => ({ ...p, end_date: e.target.value }))}
+                              min={addForm.date || undefined}
+                              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-toska-500 text-sm text-slate-700"
+                            />
+                          </div>
+                          <div className="sm:col-span-2">
                             <label className="text-xs font-medium text-slate-600 block mb-1.5">{t('price')} *</label>
                             <input
                               type="text"
@@ -1958,6 +1991,7 @@ export default function BookingManagement() {
                         />
                       </div>
                     </div>
+                  </div>
                                   {/* Document Upload Section */}
                   <div className="space-y-4">
                     <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">

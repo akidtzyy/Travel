@@ -38,6 +38,7 @@ export default function CarRentalPage() {
     item_name: '',
     booking_type: 'car',
     date: '',
+    end_date: '',
     duration: '',
     notes: '',
     total_price: ''
@@ -114,16 +115,33 @@ export default function CarRentalPage() {
   const unavailableCarsCount = cars.filter(c => c.is_available === false).length;
   const selectedCar = useMemo(() => cars.find(c => c.id === selectedCarId), [cars, selectedCarId]);
 
-  // Auto-fill form when car is selected
+  // Helper to calculate rental days
+  const getRentalDays = (start: string, end: string): number => {
+    if (!start || !end) return 1;
+    try {
+      const s = new Date(start);
+      const e = new Date(end);
+      const diffTime = e.getTime() - s.getTime();
+      if (diffTime < 0) return 1;
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+      return diffDays || 1;
+    } catch {
+      return 1;
+    }
+  };
+
+  // Auto-fill form when car is selected or dates change
   useEffect(() => {
     if (selectedCar) {
+      const days = getRentalDays(bookingForm.date, bookingForm.end_date);
       setBookingForm(prev => ({
         ...prev,
         item_name: `${translateText(selectedCar.name)} (${selectedCar.type === 'self_drive' ? t('selfDrive') : t('withDriver')})`,
-        total_price: formatPrice(selectedCar.price),
+        duration: `${days} Hari`,
+        total_price: formatPrice(selectedCar.price * days),
       }));
     }
-  }, [selectedCar, t, translateText]);
+  }, [selectedCar, bookingForm.date, bookingForm.end_date, t, translateText]);
 
   // Auto-fill user data when logged in or profile changes
   useEffect(() => {
@@ -276,6 +294,7 @@ export default function CarRentalPage() {
         booking_type: 'car',
         item_name: bookingForm.item_name,
         date: bookingForm.date,
+        end_date: bookingForm.end_date || null,
         duration: bookingForm.duration,
         notes: bookingForm.notes,
         total_price: bookingForm.total_price,
@@ -316,6 +335,7 @@ export default function CarRentalPage() {
         item_name: '',
         booking_type: 'car',
         date: '',
+        end_date: '',
         duration: '',
         notes: '',
         total_price: ''
@@ -621,17 +641,6 @@ export default function CarRentalPage() {
                   />
                   <p className="text-xs text-ocean-500 mt-1">{locale === 'id' ? 'Hanya angka yang diperbolehkan' : 'Only numbers allowed'}</p>
                 </div>
-                {/* Tanggal */}
-                <div>
-                  <label className="block text-sm font-medium text-ocean-800 mb-1.5">{t('startDateRent')} *</label>
-                  <input
-                    type="date"
-                    required
-                    value={bookingForm.date}
-                    onChange={e => setBookingForm(p => ({ ...p, date: e.target.value }))}
-                    className="w-full px-4 py-3 rounded-xl border border-ocean-200 bg-white focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm"
-                  />
-                </div>
 
                 {/* Kewarganegaraan */}
                 <div className="sm:col-span-2">
@@ -840,30 +849,42 @@ export default function CarRentalPage() {
                     ))}
                   </select>
                 </div>
-
                 {/* Durasi Sewa & Price Summary */}
                 {selectedCar && (
                   <>
-                    <div>
-                      <label className="block text-sm font-medium text-ocean-800 mb-1.5">{t('rentDuration')}</label>
-                      <input
-                        type="text"
-                        value={bookingForm.duration}
-                        onChange={e => setBookingForm(p => ({ ...p, duration: e.target.value }))}
-                        className="w-full px-4 py-3 rounded-xl border border-ocean-200 bg-white focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm"
-                        placeholder={locale === 'id' ? 'Contoh: 2 hari' : 'Example: 2 days'}
-                      />
+                    <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-ocean-800 mb-1.5">{t('startDateRent')} *</label>
+                        <input
+                          type="date"
+                          required
+                          value={bookingForm.date}
+                          onChange={e => setBookingForm(p => ({ ...p, date: e.target.value }))}
+                          className="w-full px-4 py-3 rounded-xl border border-ocean-200 bg-white focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-ocean-800 mb-1.5">{locale === 'id' ? 'Tanggal Selesai Sewa *' : 'End Date Rent *'}</label>
+                        <input
+                          type="date"
+                          required
+                          value={bookingForm.end_date}
+                          onChange={e => setBookingForm(p => ({ ...p, end_date: e.target.value }))}
+                          min={bookingForm.date || undefined}
+                          className="w-full px-4 py-3 rounded-xl border border-ocean-200 bg-white focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm"
+                        />
+                      </div>
                     </div>
 
                     {/* Price Summary */}
-                    <div className="bg-toska-50 border border-toska-200 rounded-xl p-4 flex items-center justify-between">
+                    <div className="sm:col-span-2 bg-toska-50 border border-toska-200 rounded-xl p-4 flex items-center justify-between">
                       <div>
                         <p className="text-xs text-toska-700 font-medium">{translateText(selectedCar.name)}</p>
                         <p className="text-xs text-toska-600">{selectedCar.seats} Seat · {translateText(selectedCar.duration_desc)}</p>
                       </div>
                       <div className="text-right">
-                        <p className="text-xl font-bold text-toska-700">{formatPrice(selectedCar.price)}</p>
-                        <p className="text-xs text-toska-600">{translateText(selectedCar.duration_desc)}</p>
+                        <p className="text-xl font-bold text-toska-700">{formatPrice(selectedCar.price * getRentalDays(bookingForm.date, bookingForm.end_date))}</p>
+                        <p className="text-xs text-toska-600">{bookingForm.duration}</p>
                       </div>
                     </div>
                   </>

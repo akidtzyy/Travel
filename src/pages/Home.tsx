@@ -112,6 +112,7 @@ export default function Home() {
     item_name: '',
     booking_type: 'package',
     date: '',
+    end_date: '',
     duration: '',
     notes: '',
     total_price: ''
@@ -237,16 +238,39 @@ export default function Home() {
   const filteredCars = useMemo(() => carRentals.filter(c => c.type === carFilterType), [carRentals, carFilterType]);
   const selectedCar = useMemo(() => carRentals.find(c => c.id === selectedCarId), [carRentals, selectedCarId]);
 
+  // Helper to parse pax multiplier
+  const getPaxMultiplier = (key: string): number => {
+    const num = parseInt(key, 10);
+    return isNaN(num) ? 1 : num;
+  };
+
+  // Helper to calculate rental days
+  const getRentalDays = (start: string, end: string): number => {
+    if (!start || !end) return 1;
+    try {
+      const s = new Date(start);
+      const e = new Date(end);
+      const diffTime = e.getTime() - s.getTime();
+      if (diffTime < 0) return 1;
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+      return diffDays || 1;
+    } catch {
+      return 1;
+    }
+  };
+
   // Computed: final price
   const computedPrice = useMemo(() => {
     if (bookingForm.booking_type === 'package' && selectedHotel && selectedPaxKey) {
-      return selectedHotel.prices[selectedPaxKey] || 0;
+      const pricePerPax = selectedHotel.prices[selectedPaxKey] || 0;
+      return pricePerPax * getPaxMultiplier(selectedPaxKey);
     }
     if (bookingForm.booking_type === 'car' && selectedCar) {
-      return selectedCar.price;
+      const days = getRentalDays(bookingForm.date, bookingForm.end_date);
+      return selectedCar.price * days;
     }
     return 0;
-  }, [bookingForm.booking_type, selectedHotel, selectedPaxKey, selectedCar]);
+  }, [bookingForm.booking_type, selectedHotel, selectedPaxKey, selectedCar, bookingForm.date, bookingForm.end_date]);
 
   // Auto-update item_name and total_price
   useEffect(() => {
@@ -260,14 +284,15 @@ export default function Home() {
       }));
     }
     if (bookingForm.booking_type === 'car' && selectedCar) {
+      const days = getRentalDays(bookingForm.date, bookingForm.end_date);
       setBookingForm(prev => ({
         ...prev,
         item_name: `${selectedCar.name} (${selectedCar.type === 'self_drive' ? 'Self Drive' : 'With Driver'})`,
-        duration: selectedCar.duration_desc,
+        duration: `${days} Hari`,
         total_price: formatPrice(computedPrice),
       }));
     }
-  }, [bookingForm.booking_type, selectedPkg, selectedHotel, selectedPaxKey, selectedCar, computedPrice, isPaxPricing]);
+  }, [bookingForm.booking_type, selectedPkg, selectedHotel, selectedPaxKey, selectedCar, computedPrice, isPaxPricing, bookingForm.date, bookingForm.end_date]);
 
   // Reset sub-selections when booking type changes
   const handleBookingTypeChange = (type: string) => {
@@ -438,6 +463,7 @@ export default function Home() {
           booking_type: bookingForm.booking_type === 'package' ? 'package' : 'car',
           item_name: bookingForm.item_name,
           date: bookingForm.date,
+          end_date: bookingForm.booking_type === 'car' && bookingForm.end_date ? bookingForm.end_date : null,
           duration: bookingForm.duration,
           notes: bookingForm.notes,
           total_price: bookingForm.total_price,
@@ -546,6 +572,7 @@ export default function Home() {
       item_name: '',
       booking_type: 'package',
       date: '',
+      end_date: '',
       duration: '',
       notes: '',
       total_price: ''
@@ -1044,17 +1071,6 @@ export default function Home() {
                     />
                     <p className="text-xs text-ocean-500 mt-1.5">{locale === 'id' ? 'Hanya angka yang diperbolehkan' : 'Only numbers allowed'}</p>
                   </div>
-                  {/* Tanggal */}
-                  <div>
-                    <label className="block text-sm font-medium text-ocean-800 mb-2">{bookingForm.booking_type === 'package' ? t('startDateTour') : t('startDateRent')} *</label>
-                    <input
-                      type="date"
-                      required
-                      value={bookingForm.date}
-                      onChange={e => setBookingForm(p => ({ ...p, date: e.target.value }))}
-                      className="w-full px-4 py-3 rounded-xl border border-ocean-200 bg-white focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm"
-                    />
-                  </div>
 
                   {/* Kewarganegaraan (WNI / WNA) */}
                   <div className="sm:col-span-2">
@@ -1311,6 +1327,20 @@ export default function Home() {
                         </div>
                       )}
 
+                      {/* Pilih Tanggal Booking (Paket Wisata) */}
+                      {selectedPkg && selectedHotel && selectedPaxKey && (
+                        <div className="sm:col-span-2">
+                          <label className="block text-sm font-medium text-ocean-800 mb-2">{t('startDateTour')} *</label>
+                          <input
+                            type="date"
+                            required
+                            value={bookingForm.date}
+                            onChange={e => setBookingForm(p => ({ ...p, date: e.target.value }))}
+                            className="w-full px-4 py-3 rounded-xl border border-ocean-200 bg-white focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm"
+                          />
+                        </div>
+                      )}
+
                       {/* Price Summary */}
                       {computedPrice > 0 && (
                         <div className="sm:col-span-2 bg-toska-50 border border-toska-200 rounded-xl p-4 flex items-center justify-between">
@@ -1375,30 +1405,43 @@ export default function Home() {
                         </select>
                       </div>
 
-                      {/* Durasi Sewa */}
+                      {/* Durasi Sewa dan Tanggal Rent (Sewa Mobil) */}
                       {selectedCar && (
-                        <div>
-                          <label className="block text-sm font-medium text-ocean-800 mb-2">{t('rentDuration')}</label>
-                          <input
-                            type="text"
-                            value={bookingForm.duration}
-                            onChange={e => setBookingForm(p => ({ ...p, duration: e.target.value }))}
-                            className="w-full px-4 py-3 rounded-xl border border-ocean-200 bg-white focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm"
-                            placeholder={locale === 'id' ? 'Contoh: 2 hari' : 'Example: 2 days'}
-                          />
+                        <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-ocean-800 mb-2">{t('startDateRent')} *</label>
+                            <input
+                              type="date"
+                              required
+                              value={bookingForm.date}
+                              onChange={e => setBookingForm(p => ({ ...p, date: e.target.value }))}
+                              className="w-full px-4 py-3 rounded-xl border border-ocean-200 bg-white focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-ocean-800 mb-2">{locale === 'id' ? 'Tanggal Selesai Sewa *' : 'End Date Rent *'}</label>
+                            <input
+                              type="date"
+                              required
+                              value={bookingForm.end_date}
+                              onChange={e => setBookingForm(p => ({ ...p, end_date: e.target.value }))}
+                              min={bookingForm.date || undefined}
+                              className="w-full px-4 py-3 rounded-xl border border-ocean-200 bg-white focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm"
+                            />
+                          </div>
                         </div>
                       )}
 
                       {/* Price Summary */}
                       {selectedCar && (
-                        <div className={`${selectedCar ? '' : 'sm:col-span-2'} bg-toska-50 border border-toska-200 rounded-xl p-4 flex items-center justify-between ${selectedCar ? 'sm:col-span-1' : ''}`}>
+                        <div className="sm:col-span-2 bg-toska-50 border border-toska-200 rounded-xl p-4 flex items-center justify-between">
                           <div>
                             <p className="text-xs text-toska-700 font-medium">{translateText(selectedCar.name)}</p>
                             <p className="text-xs text-toska-600">{selectedCar.seats} Seat · {translateText(selectedCar.duration_desc)}</p>
                           </div>
                           <div className="text-right">
-                            <p className="text-xl font-bold text-toska-700">{formatPrice(selectedCar.price)}</p>
-                            <p className="text-xs text-toska-600">{translateText(selectedCar.duration_desc)}</p>
+                            <p className="text-xl font-bold text-toska-700">{formatPrice(computedPrice)}</p>
+                            <p className="text-xs text-toska-600">{bookingForm.duration}</p>
                           </div>
                         </div>
                       )}
