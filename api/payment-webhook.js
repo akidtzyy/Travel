@@ -95,35 +95,6 @@ export default async function handler(req, res) {
       console.warn('[Midtrans Webhook] ⚠️ MIDTRANS_SERVER_KEY not set — skipping signature check');
     }
 
-    const payment_status = mapPaymentStatus(transaction_status, fraud_status);
-    const paid_at = payment_status === 'paid'
-      ? (transaction_time ? new Date(transaction_time).toISOString() : new Date().toISOString())
-      : null;
-
-    console.log(`[Midtrans Webhook] Mapping: transaction_status=${transaction_status}, fraud_status=${fraud_status} → payment_status=${payment_status}`);
-
-    // Build update payload
-    const updatePayload = {
-      payment_status,
-      payment_type: payment_type || null,
-      paid_at,
-    };
-
-    // Booking status is left to manual action by the admin.
-    // Only payment_status is updated automatically.
-
-    // ── Parse booking_id from order_id ─────────────────────────────
-    // order_id format: TRAVEL-{booking_id}-{timestamp}
-    // e.g. TRAVEL-34-1753276123456 → booking_id = 34
-    let numericBookingId = null;
-    const orderIdMatch = order_id.match(/^TRAVEL-(\d+)-\d+$/);
-    if (orderIdMatch) {
-      numericBookingId = parseInt(orderIdMatch[1], 10);
-      console.log(`[Midtrans Webhook] Parsed booking_id=${numericBookingId} from order_id=${order_id}`);
-    } else {
-      console.warn(`[Midtrans Webhook] ⚠️ Cannot parse booking_id from order_id: ${order_id}`);
-    }
-
     // Create Supabase client at request time
     let supabase;
     try {
@@ -133,8 +104,81 @@ export default async function handler(req, res) {
       return res.status(200).json({ message: 'DB config error logged' });
     }
 
+    // ── Parse booking_id and payment type from order_id ───────────────
+    // order_id formats:
+    // 1. TRAVEL-{booking_id}-INITIAL-{timestamp}
+    // 2. TRAVEL-{booking_id}-FINAL-{timestamp}
+    // 3. TRAVEL-{booking_id}-{timestamp} (legacy)
+    let numericBookingId = null;
+    let isFinalPayment = false;
+    const orderIdMatch = order_id.match(/^TRAVEL-(\d+)(?:-(INITIAL|FINAL))?-\d+$/);
+    if (orderIdMatch) {
+      numericBookingId = parseInt(orderIdMatch[1], 10);
+      isFinalPayment = orderIdMatch[2] === 'FINAL';
+      console.log(`[Midtrans Webhook] Parsed booking_id=${numericBookingId}, isFinalPayment=${isFinalPayment} from order_id=${order_id}`);
+    } else {
+      console.warn(`[Midtrans Webhook] ⚠️ Cannot parse booking_id from order_id: ${order_id}`);
+    }
+
+    // Fetch current booking data to determine DP and Expiry details
+    let booking = null;
+    if (numericBookingId) {
+      const { data } = await supabase
+        .from('bookings')
+        .select('*')
+        .eq('id', numericBookingId)
+        .maybeSingle();
+      booking = data;
+    }
+
+    const payment_status = mapPaymentStatus(transaction_status, fraud_status);
+    const paid_at = payment_status === 'paid'
+      ? (transaction_time ? new Date(transaction_time).toISOString() : new Date().toISOString())
+      : null;
+
+    console.log(`[Midtrans Webhook] Mapping: transaction_status=${transaction_status}, fraud_status=${fraud_status} → payment_status=${payment_status}`);
+
+    // Build update payload dynamically based on DP rules
+    let finalPaymentStatus = payment_status;
+    let amountPaidVal = booking ? Number(booking.amount_paid || 0) : 0;
+    let remainingBalanceVal = booking ? Number(booking.remaining_balance || 0) : 0;
+    let bookingStatusVal = booking ? booking.status : 'pending';
+
+    if (payment_status === 'paid') {
+      const totalAmt = booking ? Number(booking.total_amount || 0) : 0;
+      if (isFinalPayment) {
+        finalPaymentStatus = 'paid';
+        amountPaidVal = totalAmt;
+        remainingBalanceVal = 0;
+        bookingStatusVal = 'confirmed'; // automatically confirm when fully paid
+      } else {
+        const paymentType = booking ? booking.payment_type : 'FULL';
+        if (paymentType === 'DP') {
+          finalPaymentStatus = 'partially_paid';
+          amountPaidVal = Math.round(totalAmt / 2);
+          remainingBalanceVal = totalAmt - amountPaidVal;
+        } else {
+          finalPaymentStatus = 'paid';
+          amountPaidVal = totalAmt;
+          remainingBalanceVal = 0;
+        }
+      }
+    } else if (payment_status === 'expired' || payment_status === 'failed') {
+      // If initial payment expires/fails, set booking status to expired
+      if (!isFinalPayment && (!booking || booking.payment_status === 'pending' || booking.payment_status === 'unpaid')) {
+        bookingStatusVal = 'expired';
+      }
+    }
+
+    const updatePayload = {
+      payment_status: finalPaymentStatus,
+      amount_paid: amountPaidVal,
+      remaining_balance: remainingBalanceVal,
+      status: bookingStatusVal,
+      paid_at,
+    };
+
     // ── Update booking ──────────────────────────────────────────────
-    // Try by booking_id first (most reliable), fallback to order_id
     let updated = null;
     let updateErr = null;
 

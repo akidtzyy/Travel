@@ -35,6 +35,11 @@ interface Booking {
   payment_link?: string | null;
   reschedule_notes?: string | null;
   original_booking_date?: string | null;
+  payment_type?: 'FULL' | 'DP' | null;
+  total_amount?: number | null;
+  amount_paid?: number | null;
+  remaining_balance?: number | null;
+  expiry_time?: string | null;
 }
 
 interface AddBookingForm {
@@ -55,6 +60,10 @@ interface AddBookingForm {
   identity_type: 'NIK' | 'PASSPORT';
   identity_number: string;
   country_origin: string;
+  payment_type?: 'FULL' | 'DP';
+  total_amount?: number;
+  amount_paid?: number;
+  remaining_balance?: number;
 }
 
 const paxLabels: Record<string, string> = {
@@ -111,6 +120,10 @@ export default function BookingManagement() {
     identity_type: 'NIK',
     identity_number: '',
     country_origin: '',
+    payment_type: 'FULL',
+    total_amount: 0,
+    amount_paid: 0,
+    remaining_balance: 0,
   });
 
   // Autocomplete Lookup & Verification states
@@ -141,6 +154,108 @@ export default function BookingManagement() {
   const [newRescheduleDate, setNewRescheduleDate] = useState('');
   const [rescheduleNotes, setRescheduleNotes] = useState('');
   const [rescheduleLoading, setRescheduleLoading] = useState(false);
+
+  // Temporary Signed URL states for detail modal
+  const [selectedBookingKtpSignedUrl, setSelectedBookingKtpSignedUrl] = useState<string | null>(null);
+  const [selectedBookingSimSignedUrl, setSelectedBookingSimSignedUrl] = useState<string | null>(null);
+
+  const getSignedUrl = async (pathOrUrl: string | null): Promise<string> => {
+    if (!pathOrUrl) return '';
+    if (pathOrUrl.startsWith('blob:')) return pathOrUrl;
+    
+    let path = pathOrUrl;
+    const marker = '/object/public/booking-documents/';
+    const idx = pathOrUrl.indexOf(marker);
+    if (idx !== -1) {
+      path = pathOrUrl.substring(idx + marker.length);
+    }
+    
+    try {
+      const { data, error } = await supabase.storage
+        .from('booking-documents')
+        .createSignedUrl(path, 60);
+      if (error) throw error;
+      return data.signedUrl;
+    } catch (err) {
+      console.error('Error generating signed URL:', err);
+      return pathOrUrl;
+    }
+  };
+
+  useEffect(() => {
+    const resolveUrls = async () => {
+      if (selectedBooking) {
+        if (selectedBooking.ktp_url) {
+          const signed = await getSignedUrl(selectedBooking.ktp_url);
+          setSelectedBookingKtpSignedUrl(signed);
+        } else {
+          setSelectedBookingKtpSignedUrl(null);
+        }
+        
+        if (selectedBooking.sim_url) {
+          const signed = await getSignedUrl(selectedBooking.sim_url);
+          setSelectedBookingSimSignedUrl(signed);
+        } else {
+          setSelectedBookingSimSignedUrl(null);
+        }
+      } else {
+        setSelectedBookingKtpSignedUrl(null);
+        setSelectedBookingSimSignedUrl(null);
+      }
+    };
+    resolveUrls();
+  }, [selectedBooking]);
+
+  const applyWatermark = (file: File): Promise<Blob> => {
+    return new Promise((resolve) => {
+      if (!file.type.startsWith('image/')) {
+        resolve(file);
+        return;
+      }
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target?.result as string;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            resolve(file);
+            return;
+          }
+
+          canvas.width = img.width;
+          canvas.height = img.height;
+          ctx.drawImage(img, 0, 0);
+
+          const watermarkText = 'FOR VERIFICATION ONLY';
+          const fontSize = Math.max(20, Math.round(img.width / 20));
+          ctx.font = `bold ${fontSize}px sans-serif`;
+          ctx.fillStyle = 'rgba(255, 0, 0, 0.3)';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+
+          ctx.save();
+          ctx.translate(canvas.width / 2, canvas.height / 2);
+          ctx.rotate(-Math.PI / 6);
+          
+          ctx.fillText(watermarkText, 0, 0);
+          ctx.fillText(watermarkText, 0, -fontSize * 2.5);
+          ctx.fillText(watermarkText, 0, fontSize * 2.5);
+          
+          ctx.restore();
+
+          canvas.toBlob((blob) => {
+            if (blob) resolve(blob);
+            else resolve(file);
+          }, file.type, 0.85);
+        };
+        img.onerror = () => resolve(file);
+      };
+      reader.onerror = () => resolve(file);
+    });
+  };
 
   const handleCustomerSearch = async (query: string) => {
     setCustSearchQuery(query);
@@ -489,11 +604,18 @@ export default function BookingManagement() {
   };
 
   const uploadDoc = async (file: File, folder: string): Promise<string | null> => {
+    let fileToUpload: Blob = file;
+    try {
+      fileToUpload = await applyWatermark(file);
+    } catch (e) {
+      console.warn('Failed to apply watermark, using original:', e);
+    }
+
     const ext = file.name.split('.').pop();
     const path = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
     const { error } = await supabase.storage
       .from('booking-documents')
-      .upload(path, file, { contentType: file.type, upsert: false });
+      .upload(path, fileToUpload, { contentType: file.type, upsert: false });
     if (error) { console.error('Upload error:', error); return null; }
     const { data } = supabase.storage.from('booking-documents').getPublicUrl(path);
     return data.publicUrl;
@@ -666,6 +788,12 @@ export default function BookingManagement() {
       };
 
       // Insert Booking linked to customerId
+      const rawPrice = addForm.total_price.replace(/[^0-9]/g, '');
+      const totalAmountNum = parseInt(rawPrice, 10) || 0;
+      const bookingPaymentType = addForm.payment_type || 'FULL';
+      const amountPaidNum = 0;
+      const remainingBalanceNum = totalAmountNum;
+
       const { data: bookingData, error: bookingErr } = await supabase.from('bookings').insert({
         customer_id: customerId,
         nik: addForm.nationality_type === 'WNI' ? addForm.identity_number : '',
@@ -681,6 +809,10 @@ export default function BookingManagement() {
         total_price: addForm.total_price,
         status: addForm.status,
         payment_status: 'unpaid',
+        payment_type: bookingPaymentType,
+        total_amount: totalAmountNum,
+        amount_paid: amountPaidNum,
+        remaining_balance: remainingBalanceNum,
         ktp_url,
         sim_url,
         booking_details_snapshot: snapshot
@@ -694,12 +826,7 @@ export default function BookingManagement() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             booking_id: bookingData.id,
-            name: addForm.name,
-            email: addForm.email,
-            phone: cleanPhone,
-            item_name: addForm.item_name,
-            total_price: addForm.total_price,
-            booking_type: addForm.booking_type
+            payment_type: bookingPaymentType,
           })
         });
       } catch (payErr) {
@@ -1408,8 +1535,60 @@ export default function BookingManagement() {
                       <span className="text-slate-500">{locale === 'id' ? 'Total Harga' : 'Total Price'}</span>
                       <span className="font-bold text-slate-900">{selectedBooking.total_price}</span>
                     </div>
+                    {/* DP Payment Info */}
+                    {selectedBooking.payment_type === 'DP' && (
+                      <>
+                        <div className="pt-1 border-t border-slate-100" />
+                        <div className="flex justify-between items-center text-sm">
+                          <span className="text-slate-500">{locale === 'id' ? 'Tipe Pembayaran' : 'Payment Type'}</span>
+                          <span className="font-semibold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full text-xs">
+                            DP 50%
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center text-sm">
+                          <span className="text-slate-500">{locale === 'id' ? 'Sudah Dibayar' : 'Amount Paid'}</span>
+                          <span className="font-semibold text-emerald-600">
+                            Rp {(selectedBooking.amount_paid ?? 0).toLocaleString('id-ID')}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center text-sm">
+                          <span className="text-slate-500">{locale === 'id' ? 'Sisa Pelunasan' : 'Remaining Balance'}</span>
+                          <span className={`font-semibold ${(selectedBooking.remaining_balance ?? 0) > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                            Rp {(selectedBooking.remaining_balance ?? 0).toLocaleString('id-ID')}
+                          </span>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
+
+                {/* H-1 Pelunasan Alert */}
+                {(() => {
+                  if (selectedBooking.payment_type !== 'DP' || (selectedBooking.remaining_balance ?? 0) <= 0) return null;
+                  const tripDate = new Date(selectedBooking.date);
+                  const tomorrow = new Date();
+                  tomorrow.setDate(tomorrow.getDate() + 1);
+                  const daysDiff = Math.ceil((tripDate.getTime() - tomorrow.getTime()) / (1000 * 60 * 60 * 24));
+                  
+                  if (daysDiff <= 1) {
+                    return (
+                      <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl p-4">
+                        <div className="text-red-500 mt-0.5">⚠️</div>
+                        <div>
+                          <p className="text-sm font-bold text-red-700">
+                            {locale === 'id' ? 'Pelunasan Jatuh Tempo H-1!' : 'Final Payment Due H-1!'}
+                          </p>
+                          <p className="text-xs text-red-600 mt-0.5">
+                            {locale === 'id' 
+                              ? `Pelanggan wajib melunasi Rp ${(selectedBooking.remaining_balance ?? 0).toLocaleString('id-ID')} sebelum tanggal trip.`
+                              : `Customer must pay Rp ${(selectedBooking.remaining_balance ?? 0).toLocaleString('id-ID')} before the trip date.`}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
 
                 {/* Notes */}
                 {selectedBooking.notes && (
@@ -1434,14 +1613,14 @@ export default function BookingManagement() {
                     <div className="grid grid-cols-2 gap-3">
                       {selectedBooking.ktp_url && (
                         <a
-                          href={selectedBooking.ktp_url}
+                          href={selectedBookingKtpSignedUrl || selectedBooking.ktp_url}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="group block"
                         >
                           <div className="relative overflow-hidden rounded-xl border border-slate-200 bg-slate-50 hover:border-toska-300 transition-colors">
                             <img
-                              src={selectedBooking.ktp_url}
+                              src={selectedBookingKtpSignedUrl || selectedBooking.ktp_url}
                               alt="KTP"
                               className="w-full h-20 object-cover group-hover:scale-105 transition-transform duration-200"
                             />
@@ -1454,14 +1633,14 @@ export default function BookingManagement() {
                       )}
                       {selectedBooking.sim_url && (
                         <a
-                          href={selectedBooking.sim_url}
+                          href={selectedBookingSimSignedUrl || selectedBooking.sim_url}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="group block"
                         >
                           <div className="relative overflow-hidden rounded-xl border border-slate-200 bg-slate-50 hover:border-toska-300 transition-colors">
                             <img
-                              src={selectedBooking.sim_url}
+                              src={selectedBookingSimSignedUrl || selectedBooking.sim_url}
                               alt="SIM"
                               className="w-full h-20 object-cover group-hover:scale-105 transition-transform duration-200"
                             />
@@ -2040,6 +2219,25 @@ export default function BookingManagement() {
                           <option value="completed">{t('completed')}</option>
                           <option value="cancelled">{t('cancelled')}</option>
                         </select>
+                      </div>
+                      {/* Payment Type Selector */}
+                      <div>
+                        <label className="text-xs font-medium text-slate-600 block mb-1.5">
+                          {locale === 'id' ? 'Metode Pembayaran' : 'Payment Method'}
+                        </label>
+                        <select
+                          value={addForm.payment_type || 'FULL'}
+                          onChange={e => setAddForm(p => ({ ...p, payment_type: e.target.value as 'FULL' | 'DP' }))}
+                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-toska-500 text-sm text-slate-700 bg-white"
+                        >
+                          <option value="FULL">{locale === 'id' ? 'Lunas (Full Payment)' : 'Full Payment'}</option>
+                          <option value="DP">{locale === 'id' ? 'DP 50% (Down Payment)' : 'DP 50% (Down Payment)'}</option>
+                        </select>
+                        {addForm.payment_type === 'DP' && addForm.total_price && (
+                          <p className="mt-1.5 text-xs text-amber-600 font-medium">
+                            💡 {locale === 'id' ? 'DP yang akan dibayar:' : 'Initial DP amount:'} Rp {(parseInt(addForm.total_price.replace(/[^0-9]/g, ''), 10) / 2).toLocaleString('id-ID')}
+                          </p>
+                        )}
                       </div>
                       <div>
                         <label className="text-xs font-medium text-slate-600 block mb-1.5">{t('notes')}</label>

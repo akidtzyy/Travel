@@ -74,6 +74,29 @@ export default function CustomerDatabase() {
 
   useEffect(() => { loadCustomers(); }, []);
 
+  const getSignedUrl = async (pathOrUrl: string | null): Promise<string> => {
+    if (!pathOrUrl) return '';
+    if (pathOrUrl.startsWith('blob:')) return pathOrUrl;
+    
+    let path = pathOrUrl;
+    const marker = '/object/public/booking-documents/';
+    const idx = pathOrUrl.indexOf(marker);
+    if (idx !== -1) {
+      path = pathOrUrl.substring(idx + marker.length);
+    }
+    
+    try {
+      const { data, error } = await supabase.storage
+        .from('booking-documents')
+        .createSignedUrl(path, 60);
+      if (error) throw error;
+      return data.signedUrl;
+    } catch (err) {
+      console.error('Error generating signed URL:', err);
+      return pathOrUrl;
+    }
+  };
+
   const handleViewDocuments = async (cust: Customer) => {
     setSelectedCustName(cust.full_name);
     setSelectedCustDocs([]);
@@ -85,16 +108,18 @@ export default function CustomerDatabase() {
 
       // Check customer profile documents (KTP/Passport and SIM/IDP)
       if (cust.ktp_passport_url) {
+        const signedKtp = await getSignedUrl(cust.ktp_passport_url);
         docs.push({
           label: cust.nationality_type === 'WNA' ? 'Foto Paspor (Passport)' : 'Foto KTP / Identitas',
-          url: cust.ktp_passport_url,
+          url: signedKtp,
           booking_info: 'Dokumen utama terdaftar'
         });
       }
       if (cust.sim_idp_url) {
+        const signedSim = await getSignedUrl(cust.sim_idp_url);
         docs.push({
           label: cust.nationality_type === 'WNA' ? 'Foto International Driving Permit (IDP)' : 'Foto SIM (Driver License)',
-          url: cust.sim_idp_url,
+          url: signedSim,
           booking_info: 'Dokumen mengemudi terdaftar'
         });
       }

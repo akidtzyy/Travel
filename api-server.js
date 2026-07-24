@@ -68,6 +68,9 @@ const server = createServer(async (req, res) => {
     } else if (path === '/api/booking') {
       const { default: handler } = await import('./api/booking.js');
       await handler(mockReq, mockRes);
+    } else if (path === '/api/cron-check-expiry') {
+      const { default: handler } = await import('./api/cron-check-expiry.js');
+      await handler(mockReq, mockRes);
     } else {
       mockRes.status(404).json({ error: 'Not found' });
     }

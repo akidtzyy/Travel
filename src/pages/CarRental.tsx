@@ -41,7 +41,8 @@ export default function CarRentalPage() {
     end_date: '',
     duration: '',
     notes: '',
-    total_price: ''
+    total_price: '',
+    payment_type: 'FULL'
   });
   const [bookingSuccess, setBookingSuccess] = useState(false);
   const [bookingLoading, setBookingLoading] = useState(false);
@@ -159,12 +160,70 @@ export default function CarRentalPage() {
     }
   }, [user, profile, isLoggedIn]);
 
+  const applyWatermark = (file: File): Promise<Blob> => {
+    return new Promise((resolve) => {
+      if (!file.type.startsWith('image/')) {
+        resolve(file);
+        return;
+      }
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target?.result as string;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            resolve(file);
+            return;
+          }
+
+          canvas.width = img.width;
+          canvas.height = img.height;
+          ctx.drawImage(img, 0, 0);
+
+          const watermarkText = 'FOR VERIFICATION ONLY';
+          const fontSize = Math.max(20, Math.round(img.width / 20));
+          ctx.font = `bold ${fontSize}px sans-serif`;
+          ctx.fillStyle = 'rgba(255, 0, 0, 0.3)';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+
+          ctx.save();
+          ctx.translate(canvas.width / 2, canvas.height / 2);
+          ctx.rotate(-Math.PI / 6);
+          
+          ctx.fillText(watermarkText, 0, 0);
+          ctx.fillText(watermarkText, 0, -fontSize * 2.5);
+          ctx.fillText(watermarkText, 0, fontSize * 2.5);
+          
+          ctx.restore();
+
+          canvas.toBlob((blob) => {
+            if (blob) resolve(blob);
+            else resolve(file);
+          }, file.type, 0.85);
+        };
+        img.onerror = () => resolve(file);
+      };
+      reader.onerror = () => resolve(file);
+    });
+  };
+
   const uploadDoc = async (file: File, folder: string): Promise<string | null> => {
+    let fileToUpload: Blob = file;
+    try {
+      fileToUpload = await applyWatermark(file);
+    } catch (e) {
+      console.warn('Failed to apply watermark, using original:', e);
+    }
+
     const ext = file.name.split('.').pop();
     const path = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
     const { error } = await supabase.storage
       .from('booking-documents')
-      .upload(path, file, { contentType: file.type, upsert: false });
+      .upload(path, fileToUpload, { contentType: file.type, upsert: false });
     if (error) { console.error('Upload error:', error); return null; }
     const { data } = supabase.storage.from('booking-documents').getPublicUrl(path);
     return data.publicUrl;
@@ -285,6 +344,10 @@ export default function CarRentalPage() {
       };
 
       // 5. Insert Booking
+      const rawTotalPrice = bookingForm.total_price.replace(/[^0-9]/g, '');
+      const totalAmountNum = parseInt(rawTotalPrice, 10) || 0;
+      const bookingPaymentType = bookingForm.payment_type || 'FULL';
+
       const { error: bookingErr } = await supabase.from('bookings').insert({
         customer_id: customerId,
         nik: bookingForm.nationality_type === 'WNI' ? bookingForm.identity_number : '',
@@ -300,6 +363,10 @@ export default function CarRentalPage() {
         total_price: bookingForm.total_price,
         status: 'pending',
         payment_status: 'unpaid',
+        payment_type: bookingPaymentType,
+        total_amount: totalAmountNum,
+        amount_paid: 0,
+        remaining_balance: totalAmountNum,
         ktp_url: ktpPassportUrl || null,
         sim_url: simIdpUrl || null,
         booking_details_snapshot: snapshot
@@ -338,7 +405,8 @@ export default function CarRentalPage() {
         end_date: '',
         duration: '',
         notes: '',
-        total_price: ''
+        total_price: '',
+        payment_type: 'FULL'
       });
       setKtpPassportFile(null);
       setKtpPassportPreview(null);
@@ -889,6 +957,31 @@ export default function CarRentalPage() {
                     </div>
                   </>
                 )}
+
+                {/* Tipe Pembayaran (DP atau FULL) */}
+                <div className="sm:col-span-2">
+                  <label className="block text-sm font-medium text-ocean-800 mb-2">
+                    {locale === 'id' ? 'Metode Pembayaran' : 'Payment Method'}
+                  </label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setBookingForm(p => ({ ...p, payment_type: 'FULL' }))}
+                      className={`flex flex-col p-4 rounded-xl border-2 text-left transition-all ${bookingForm.payment_type === 'FULL' ? 'border-toska-500 bg-toska-50/50' : 'border-slate-200 hover:border-slate-300'}`}
+                    >
+                      <span className="font-bold text-sm text-ocean-900">{locale === 'id' ? 'Bayar Lunas (Full)' : 'Full Payment'}</span>
+                      <span className="text-xs text-slate-500 mt-1">{locale === 'id' ? 'Bayar lunas total biaya' : 'Pay total amount now'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBookingForm(p => ({ ...p, payment_type: 'DP' }))}
+                      className={`flex flex-col p-4 rounded-xl border-2 text-left transition-all ${bookingForm.payment_type === 'DP' ? 'border-toska-500 bg-toska-50/50' : 'border-slate-200 hover:border-slate-300'}`}
+                    >
+                      <span className="font-bold text-sm text-ocean-900">{locale === 'id' ? 'DP 50% (Uang Muka)' : 'Down Payment 50%'}</span>
+                      <span className="text-xs text-slate-500 mt-1">{locale === 'id' ? 'Bayar 50%, pelunasan H-1' : 'Pay 50% now, rest H-1'}</span>
+                    </button>
+                  </div>
+                </div>
 
                 {/* Catatan */}
                 <div className="sm:col-span-2">
