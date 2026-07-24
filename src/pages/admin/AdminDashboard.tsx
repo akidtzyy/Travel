@@ -17,12 +17,13 @@ interface RecentCustomer {
   email: string;
   phone: string;
   booking_status: string;
+  booking_type: 'package' | 'car';
   date: string;
   end_date?: string | null;
 }
 
 export default function AdminDashboard() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [stats, setStats] = useState<DashboardStats>({
     totalPackages: 0, totalCars: 0, totalCustomers: 0, totalBookings: 0,
   });
@@ -58,6 +59,7 @@ export default function AdminDashboard() {
           email: b.email,
           phone: b.phone,
           booking_status: b.status,
+          booking_type: b.booking_type,
           date: b.date,
           end_date: b.end_date
         })));
@@ -186,6 +188,7 @@ export default function AdminDashboard() {
               <thead>
                 <tr className="border-b border-slate-100">
                   <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">{t('fullName')}</th>
+                  <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">{locale === 'id' ? 'Jenis Booking' : 'Booking Type'}</th>
                   <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">{t('emailAddress')}</th>
                   <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">{t('phoneNumber')}</th>
                   <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">{t('status')}</th>
@@ -202,6 +205,14 @@ export default function AdminDashboard() {
                         </div>
                         <span className="text-sm font-medium text-slate-900">{cust.full_name}</span>
                       </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold ${cust.booking_type === 'package'
+                        ? 'bg-orange-50 text-orange-600 border border-orange-200'
+                        : 'bg-cyan-50 text-cyan-600 border border-cyan-200'
+                        }`}>
+                        {cust.booking_type === 'package' ? t('tourPackage') : t('carRental')}
+                      </span>
                     </td>
                     <td className="px-6 py-4 text-sm text-slate-600">{cust.email}</td>
                     <td className="px-6 py-4 text-sm text-slate-600">{cust.phone}</td>
