@@ -1046,7 +1046,7 @@ export default function BookingManagement() {
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm text-slate-700">
               {pagedBookings.length > 0 ? (
-                pagedBookings.map((b) => (
+                pagedBookings.map((b, index) => (
                   <tr key={b.id} className="hover:bg-slate-50/50 transition-colors">
                     <td className="px-6 py-4.5 font-semibold text-slate-900">#{b.id}</td>
                     <td className="px-6 py-4.5 text-sm font-semibold text-slate-700 font-mono">{b.nik || '-'}</td>
@@ -1114,19 +1114,8 @@ export default function BookingManagement() {
                                 className="fixed inset-0 z-40 cursor-default"
                                 onClick={() => setActiveDropdownId(null)}
                               />
-                              <div className="absolute right-0 top-full mt-2 w-56 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1.5 text-left animate-in fade-in slide-in-from-top-1 duration-100">
-                                {/* Detail */}
-                                <button
-                                  onClick={() => {
-                                    setSelectedBooking(b);
-                                    setShowDetailModal(true);
-                                    setActiveDropdownId(null);
-                                  }}
-                                  className="w-full px-3.5 py-2 hover:bg-slate-50 text-xs font-medium text-slate-700 flex items-center gap-2 transition-colors"
-                                >
-                                  <Eye className="w-4 h-4 text-slate-400" />
-                                  {locale === 'id' ? 'Lihat Detail' : 'View Details'}
-                                </button>
+                              <div className={`absolute right-0 w-56 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1.5 text-left animate-in fade-in duration-100 ${index >= 4 ? 'bottom-full mb-2 slide-in-from-bottom-1' : 'top-full mt-2 slide-in-from-top-1'}`}>
+
 
                                 {/* Print Invoice */}
                                 <button
