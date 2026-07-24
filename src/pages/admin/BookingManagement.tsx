@@ -1711,9 +1711,9 @@ export default function BookingManagement() {
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       {/* Kewarganegaraan */}
-                      <div className="sm:col-span-2">
+                      <div>
                         <label className="text-xs font-semibold text-slate-600 block mb-1.5">{locale === 'id' ? 'Kewarganegaraan' : 'Nationality'} *</label>
-                        <div className="flex gap-4">
+                        <div className="flex gap-4 py-2">
                           <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer">
                             <input
                               type="radio"
@@ -1723,7 +1723,7 @@ export default function BookingManagement() {
                               onChange={() => setAddForm(p => ({ ...p, nationality_type: 'WNI', identity_type: 'NIK', country_origin: '' }))}
                               className="w-4 h-4 text-toska-500 focus:ring-toska-500"
                             />
-                            WNI (Warga Negara Indonesia)
+                            WNI
                           </label>
                           <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer">
                             <input
@@ -1734,13 +1734,13 @@ export default function BookingManagement() {
                               onChange={() => setAddForm(p => ({ ...p, nationality_type: 'WNA', identity_type: 'PASSPORT', country_origin: '' }))}
                               className="w-4 h-4 text-toska-500 focus:ring-toska-500"
                             />
-                            WNA (Warga Negara Asing / Foreigner)
+                            WNA (Foreigner)
                           </label>
                         </div>
                       </div>
 
                       {/* Nomor Identitas (NIK / Paspor) */}
-                      <div className="sm:col-span-2">
+                      <div>
                         <label className="text-xs font-medium text-slate-600 block mb-1.5">
                           {addForm.nationality_type === 'WNI' ? 'NIK (16 Digit Angka)' : 'Nomor Paspor / Passport Number'} *
                         </label>
@@ -1760,9 +1760,48 @@ export default function BookingManagement() {
                         />
                       </div>
 
+                      {/* Nama Lengkap */}
+                      <div>
+                        <label className="text-xs font-medium text-slate-600 block mb-1.5">{t('fullName')} *</label>
+                        <input
+                          type="text"
+                          required
+                          value={addForm.name}
+                          onChange={e => setAddForm(p => ({ ...p, name: e.target.value }))}
+                          placeholder={locale === 'id' ? 'Nama lengkap pelanggan' : 'Full customer name'}
+                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-toska-500 text-sm text-slate-800 placeholder-slate-400"
+                        />
+                      </div>
+
+                      {/* Email */}
+                      <div>
+                        <label className="text-xs font-medium text-slate-600 block mb-1.5">Email *</label>
+                        <input
+                          type="email"
+                          required
+                          value={addForm.email}
+                          onChange={e => setAddForm(p => ({ ...p, email: e.target.value }))}
+                          placeholder="email@example.com"
+                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-toska-500 text-sm text-slate-800 placeholder-slate-400"
+                        />
+                      </div>
+
+                      {/* No. WhatsApp */}
+                      <div>
+                        <label className="text-xs font-medium text-slate-600 block mb-1.5">{locale === 'id' ? 'No. WhatsApp' : 'Phone / WhatsApp'} *</label>
+                        <input
+                          type="tel"
+                          required
+                          value={addForm.phone}
+                          onChange={e => setAddForm(p => ({ ...p, phone: e.target.value }))}
+                          placeholder="08xxxxxxxxxx"
+                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-toska-500 text-sm text-slate-800 placeholder-slate-400"
+                        />
+                      </div>
+
                       {/* Negara Asal (Only WNA) */}
-                      {addForm.nationality_type === 'WNA' && (
-                        <div className="sm:col-span-2">
+                      {addForm.nationality_type === 'WNA' ? (
+                        <div>
                           <label className="text-xs font-medium text-slate-600 block mb-1.5">{locale === 'id' ? 'Negara Asal' : 'Country of Origin'} *</label>
                           <select
                             required
@@ -1776,40 +1815,7 @@ export default function BookingManagement() {
                             ))}
                           </select>
                         </div>
-                      )}
-                      <div className="sm:col-span-2">
-                        <label className="text-xs font-medium text-slate-600 block mb-1.5">{t('fullName')} *</label>
-                        <input
-                          type="text"
-                          required
-                          value={addForm.name}
-                          onChange={e => setAddForm(p => ({ ...p, name: e.target.value }))}
-                          placeholder={locale === 'id' ? 'Nama lengkap pelanggan' : 'Full customer name'}
-                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-toska-500 text-sm text-slate-800 placeholder-slate-400"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs font-medium text-slate-600 block mb-1.5">Email *</label>
-                        <input
-                          type="email"
-                          required
-                          value={addForm.email}
-                          onChange={e => setAddForm(p => ({ ...p, email: e.target.value }))}
-                          placeholder="email@example.com"
-                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-toska-500 text-sm text-slate-800 placeholder-slate-400"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs font-medium text-slate-600 block mb-1.5">{locale === 'id' ? 'No. WhatsApp' : 'Phone / WhatsApp'} *</label>
-                        <input
-                          type="tel"
-                          required
-                          value={addForm.phone}
-                          onChange={e => setAddForm(p => ({ ...p, phone: e.target.value }))}
-                          placeholder="08xxxxxxxxxx"
-                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-toska-500 text-sm text-slate-800 placeholder-slate-400"
-                        />
-                      </div>
+                      ) : null}
                     </div>
                   </div>
 
@@ -1893,7 +1899,7 @@ export default function BookingManagement() {
                               className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-toska-500 text-sm text-slate-700"
                             />
                           </div>
-                          <div className="sm:col-span-2">
+                          <div>
                             <label className="text-xs font-medium text-slate-600 block mb-1.5">{t('price')} *</label>
                             <input
                               type="text"
@@ -1954,7 +1960,7 @@ export default function BookingManagement() {
                               className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-toska-500 text-sm text-slate-700"
                             />
                           </div>
-                          <div className="sm:col-span-2">
+                          <div>
                             <label className="text-xs font-medium text-slate-600 block mb-1.5">{t('price')} *</label>
                             <input
                               type="text"
@@ -1967,7 +1973,7 @@ export default function BookingManagement() {
                           </div>
                         </>
                       )}
-                      <div className="sm:col-span-2">
+                      <div>
                         <label className="text-xs font-medium text-slate-600 block mb-1.5">{t('status')}</label>
                         <select
                           value={addForm.status}
@@ -1981,14 +1987,14 @@ export default function BookingManagement() {
                           <option value="cancelled">{t('cancelled')}</option>
                         </select>
                       </div>
-                      <div className="sm:col-span-2">
+                      <div>
                         <label className="text-xs font-medium text-slate-600 block mb-1.5">{t('notes')}</label>
                         <textarea
                           rows={3}
                           value={addForm.notes}
                           onChange={e => setAddForm(p => ({ ...p, notes: e.target.value }))}
                           placeholder={locale === 'id' ? 'Catatan tambahan (opsional)' : 'Additional notes (optional)'}
-                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-toska-500 text-sm text-slate-800 placeholder-slate-400 resize-none"
+                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-toska-500 text-sm text-slate-800 placeholder-slate-400 resize-none h-[42px] min-h-[42px]"
                         />
                       </div>
                     </div>
