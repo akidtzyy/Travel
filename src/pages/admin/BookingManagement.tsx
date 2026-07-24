@@ -497,22 +497,44 @@ export default function BookingManagement() {
       const isVerified = selectedCustVerificationStatus === 'VERIFIED';
       if (!isVerified) {
         if (addForm.nationality_type === 'WNI') {
-          if (addForm.booking_type === 'car' && !ktpFile) {
-            showToast('error', locale === 'id' ? 'Foto KTP/SIM wajib diunggah!' : 'KTP/SIM photo is required!');
-            setAddLoading(false);
-            return;
+          // WNI
+          if (addForm.booking_type === 'package') {
+            if (!ktpFile) {
+              showToast('error', locale === 'id' ? 'Foto KTP wajib diunggah!' : 'KTP photo is required!');
+              setAddLoading(false);
+              return;
+            }
+          } else if (addForm.booking_type === 'car') {
+            if (!ktpFile) {
+              showToast('error', locale === 'id' ? 'Foto KTP wajib diunggah!' : 'KTP photo is required!');
+              setAddLoading(false);
+              return;
+            }
+            if (!simFile) {
+              showToast('error', locale === 'id' ? 'Foto SIM wajib diunggah untuk sewa mobil!' : 'SIM photo is required for car rental!');
+              setAddLoading(false);
+              return;
+            }
           }
         } else {
           // WNA
-          if (!ktpFile) {
-            showToast('error', locale === 'id' ? 'Foto Paspor wajib diunggah!' : 'Passport photo is required!');
-            setAddLoading(false);
-            return;
-          }
-          if (addForm.booking_type === 'car' && !simFile) {
-            showToast('error', locale === 'id' ? 'Foto International Driving Permit (IDP) wajib diunggah!' : 'International Driving Permit (IDP) photo is required!');
-            setAddLoading(false);
-            return;
+          if (addForm.booking_type === 'package') {
+            if (!ktpFile) {
+              showToast('error', locale === 'id' ? 'Foto Paspor wajib diunggah!' : 'Passport photo is required!');
+              setAddLoading(false);
+              return;
+            }
+          } else if (addForm.booking_type === 'car') {
+            if (!ktpFile) {
+              showToast('error', locale === 'id' ? 'Foto Paspor wajib diunggah!' : 'Passport photo is required!');
+              setAddLoading(false);
+              return;
+            }
+            if (!simFile) {
+              showToast('error', locale === 'id' ? 'Foto International Driving Permit (IDP) wajib diunggah untuk sewa mobil!' : 'IDP photo is required for car rental!');
+              setAddLoading(false);
+              return;
+            }
           }
         }
       }
@@ -1944,83 +1966,35 @@ export default function BookingManagement() {
                       </div>
                     ) : (
                       <div className="space-y-4">
-                        {/* Document 1: KTP/SIM or Passport */}
-                        <div>
-                          <label className="text-xs font-medium text-slate-600 block mb-1.5">
-                            {addForm.nationality_type === 'WNI'
-                              ? (locale === 'id' ? 'Foto KTP/SIM' : 'KTP/SIM Photo')
-                              : (locale === 'id' ? 'Foto Paspor' : 'Passport Photo')}
-                            <span className="ml-1 text-slate-400 font-normal">
-                              {addForm.nationality_type === 'WNA' || addForm.booking_type === 'car'
-                                ? `(${locale === 'id' ? 'Wajib' : 'Required'})`
-                                : `(${locale === 'id' ? 'Opsional' : 'Optional'})`}
-                            </span>
-                          </label>
-                          <p className="text-[11px] text-slate-400 mb-2">
-                            {addForm.nationality_type === 'WNI'
-                              ? (locale === 'id' ? 'Upload foto KTP atau SIM yang masih berlaku.' : 'Upload valid KTP or Driver License.')
-                              : (locale === 'id' ? 'Upload halaman foto Paspor yang terbaca jelas.' : 'Upload main photo page of Passport.')}
-                          </p>
-                          <div
-                            onClick={() => ktpInputRef.current?.click()}
-                            className="relative border-2 border-dashed border-slate-200 rounded-xl p-4 cursor-pointer hover:border-toska-400 hover:bg-toska-50/30 transition-all group"
-                          >
-                            <input
-                              ref={ktpInputRef}
-                              type="file"
-                              accept="image/jpeg,image/jpg,image/png,image/webp"
-                              onChange={e => handleFileChange(e, 'ktp')}
-                              className="hidden"
-                            />
-                            {ktpPreview ? (
-                              <div className="flex items-center gap-3">
-                                <img src={ktpPreview} alt="Preview" className="w-20 h-14 object-cover rounded-lg border border-slate-200" />
-                                <div>
-                                  <p className="text-sm font-semibold text-slate-800">{ktpFile?.name}</p>
-                                  <p className="text-xs text-slate-500 mt-0.5">{ktpFile ? (ktpFile.size / 1024).toFixed(0) + ' KB' : ''}</p>
-                                  <p className="text-[11px] text-toska-500 mt-1">{locale === 'id' ? 'Klik untuk ganti' : 'Click to change'}</p>
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="flex flex-col items-center gap-2 py-2">
-                                <div className="w-10 h-10 bg-slate-100 group-hover:bg-toska-100 rounded-xl flex items-center justify-center transition-colors">
-                                  <ImageIcon className="w-5 h-5 text-slate-400 group-hover:text-toska-500 transition-colors" />
-                                </div>
-                                <p className="text-sm text-slate-500 group-hover:text-toska-600 transition-colors">
-                                  {addForm.nationality_type === 'WNI'
-                                    ? (locale === 'id' ? 'Klik untuk upload foto KTP/SIM' : 'Click to upload KTP/SIM photo')
-                                    : (locale === 'id' ? 'Klik untuk upload foto Paspor' : 'Click to upload Passport photo')}
-                                </p>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Document 2: IDP (Only for WNA Car Rental) */}
-                        {addForm.nationality_type === 'WNA' && addForm.booking_type === 'car' && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          {/* Document 1: KTP or Paspor */}
                           <div>
                             <label className="text-xs font-medium text-slate-600 block mb-1.5">
-                              International Driving Permit (IDP) *
-                              <span className="ml-1 text-amber-500 font-normal">({locale === 'id' ? 'Wajib untuk sewa mobil' : 'Required for car rental'})</span>
+                              {addForm.nationality_type === 'WNI' ? 'Foto KTP *' : 'Foto Paspor *'}
+                              <span className="ml-1 text-red-500 font-normal">({locale === 'id' ? 'Wajib' : 'Required'})</span>
                             </label>
-                            <p className="text-[11px] text-slate-400 mb-2">Upload foto halaman depan/identitas dari IDP Anda.</p>
+                            <p className="text-[11px] text-slate-400 mb-2">
+                              {addForm.nationality_type === 'WNI'
+                                ? (locale === 'id' ? 'Upload foto KTP asli Anda.' : 'Upload your original KTP photo.')
+                                : (locale === 'id' ? 'Upload halaman foto Paspor yang terbaca jelas.' : 'Upload main photo page of Passport.')}
+                            </p>
                             <div
-                              onClick={() => simInputRef.current?.click()}
-                              className="relative border-2 border-dashed border-amber-200 bg-amber-50/10 rounded-xl p-4 cursor-pointer hover:border-toska-400 hover:bg-toska-50/30 transition-all group"
+                              onClick={() => ktpInputRef.current?.click()}
+                              className="relative border-2 border-dashed border-slate-200 rounded-xl p-4 cursor-pointer hover:border-toska-400 hover:bg-toska-50/30 transition-all group"
                             >
                               <input
-                                ref={simInputRef}
+                                ref={ktpInputRef}
                                 type="file"
                                 accept="image/jpeg,image/jpg,image/png,image/webp"
-                                onChange={e => handleFileChange(e, 'sim')}
+                                onChange={e => handleFileChange(e, 'ktp')}
                                 className="hidden"
                               />
-                              {simPreview ? (
+                              {ktpPreview ? (
                                 <div className="flex items-center gap-3">
-                                  <img src={simPreview} alt="Preview" className="w-20 h-14 object-cover rounded-lg border border-slate-200" />
+                                  <img src={ktpPreview} alt="Preview" className="w-20 h-14 object-cover rounded-lg border border-slate-200" />
                                   <div>
-                                    <p className="text-sm font-semibold text-slate-800">{simFile?.name}</p>
-                                    <p className="text-xs text-slate-500 mt-0.5">{simFile ? (simFile.size / 1024).toFixed(0) + ' KB' : ''}</p>
+                                    <p className="text-sm font-semibold text-slate-800">{ktpFile?.name}</p>
+                                    <p className="text-xs text-slate-500 mt-0.5">{ktpFile ? (ktpFile.size / 1024).toFixed(0) + ' KB' : ''}</p>
                                     <p className="text-[11px] text-toska-500 mt-1">{locale === 'id' ? 'Klik untuk ganti' : 'Click to change'}</p>
                                   </div>
                                 </div>
@@ -2030,17 +2004,68 @@ export default function BookingManagement() {
                                     <ImageIcon className="w-5 h-5 text-slate-400 group-hover:text-toska-500 transition-colors" />
                                   </div>
                                   <p className="text-sm text-slate-500 group-hover:text-toska-600 transition-colors">
-                                    {locale === 'id' ? 'Klik untuk upload foto IDP' : 'Click to upload IDP photo'}
+                                    {addForm.nationality_type === 'WNI'
+                                      ? (locale === 'id' ? 'Klik untuk upload foto KTP' : 'Click to upload KTP photo')
+                                      : (locale === 'id' ? 'Klik untuk upload foto Paspor' : 'Click to upload Passport photo')}
                                   </p>
                                 </div>
                               )}
                             </div>
                           </div>
-                        )}
+
+                          {/* Document 2: SIM or IDP (Only for Car Rental) */}
+                          {addForm.booking_type === 'car' && (
+                            <div>
+                              <label className="text-xs font-medium text-slate-600 block mb-1.5">
+                                {addForm.nationality_type === 'WNI' ? 'Foto SIM *' : 'International Driving Permit (IDP) *'}
+                                <span className="ml-1 text-amber-500 font-normal">({locale === 'id' ? 'Wajib untuk sewa mobil' : 'Required for car rental'})</span>
+                              </label>
+                              <p className="text-[11px] text-slate-400 mb-2">
+                                {addForm.nationality_type === 'WNI'
+                                  ? (locale === 'id' ? 'Upload foto SIM asli yang masih berlaku.' : 'Upload your valid original SIM photo.')
+                                  : (locale === 'id' ? 'Upload foto halaman depan/identitas IDP Anda.' : 'Upload photo of your IDP card.')}
+                              </p>
+                              <div
+                                onClick={() => simInputRef.current?.click()}
+                                className="relative border-2 border-dashed border-slate-200 rounded-xl p-4 cursor-pointer hover:border-toska-400 hover:bg-toska-50/30 transition-all group"
+                              >
+                                <input
+                                  ref={simInputRef}
+                                  type="file"
+                                  accept="image/jpeg,image/jpg,image/png,image/webp"
+                                  onChange={e => handleFileChange(e, 'sim')}
+                                  className="hidden"
+                                />
+                                {simPreview ? (
+                                  <div className="flex items-center gap-3">
+                                    <img src={simPreview} alt="Preview" className="w-20 h-14 object-cover rounded-lg border border-slate-200" />
+                                    <div>
+                                      <p className="text-sm font-semibold text-slate-800">{simFile?.name}</p>
+                                      <p className="text-xs text-slate-500 mt-0.5">{simFile ? (simFile.size / 1024).toFixed(0) + ' KB' : ''}</p>
+                                      <p className="text-[11px] text-toska-500 mt-1">{locale === 'id' ? 'Klik untuk ganti' : 'Click to change'}</p>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="flex flex-col items-center gap-2 py-2">
+                                    <div className="w-10 h-10 bg-slate-100 group-hover:bg-toska-100 rounded-xl flex items-center justify-center transition-colors">
+                                      <ImageIcon className="w-5 h-5 text-slate-400 group-hover:text-toska-500 transition-colors" />
+                                    </div>
+                                    <p className="text-sm text-slate-500 group-hover:text-toska-600 transition-colors">
+                                      {addForm.nationality_type === 'WNI'
+                                        ? (locale === 'id' ? 'Klik untuk upload foto SIM' : 'Click to upload SIM photo')
+                                        : (locale === 'id' ? 'Klik untuk upload foto IDP' : 'Click to upload IDP photo')}
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )}
-                  </div>        </div>
+                  </div>
                 </div>
+              </div>
 
                 {/* Footer Actions */}
                 <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-3">

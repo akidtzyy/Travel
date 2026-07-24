@@ -307,22 +307,44 @@ export default function Home() {
       const isVerified = profile?.identity_verification_status === 'VERIFIED';
       if (!isVerified) {
         if (bookingForm.nationality_type === 'WNI') {
-          if (bookingForm.booking_type === 'car' && !ktpPassportFile) {
-            alert(locale === 'id' ? 'Foto KTP/SIM wajib diunggah untuk sewa mobil!' : 'KTP/SIM photo is required for car rental!');
-            setBookingLoading(false);
-            return;
+          // WNI
+          if (bookingForm.booking_type === 'package') {
+            if (!ktpPassportFile && !profile?.ktp_passport_url) {
+              alert(locale === 'id' ? 'Foto KTP wajib diunggah untuk pemesanan paket wisata!' : 'KTP photo is required for tour package booking!');
+              setBookingLoading(false);
+              return;
+            }
+          } else if (bookingForm.booking_type === 'car') {
+            if (!ktpPassportFile && !profile?.ktp_passport_url) {
+              alert(locale === 'id' ? 'Foto KTP wajib diunggah!' : 'KTP photo is required!');
+              setBookingLoading(false);
+              return;
+            }
+            if (!simIdpFile && !profile?.sim_idp_url) {
+              alert(locale === 'id' ? 'Foto SIM wajib diunggah untuk sewa mobil!' : 'SIM photo is required for car rental!');
+              setBookingLoading(false);
+              return;
+            }
           }
         } else {
           // WNA
-          if (!ktpPassportFile) {
-            alert(locale === 'id' ? 'Foto Paspor wajib diunggah!' : 'Passport photo is required!');
-            setBookingLoading(false);
-            return;
-          }
-          if (bookingForm.booking_type === 'car' && !simIdpFile) {
-            alert(locale === 'id' ? 'Foto International Driving Permit (IDP) wajib diunggah untuk sewa mobil!' : 'International Driving Permit (IDP) photo is required for car rental!');
-            setBookingLoading(false);
-            return;
+          if (bookingForm.booking_type === 'package') {
+            if (!ktpPassportFile && !profile?.ktp_passport_url) {
+              alert(locale === 'id' ? 'Foto Paspor wajib diunggah untuk pemesanan paket wisata!' : 'Passport photo is required for tour package booking!');
+              setBookingLoading(false);
+              return;
+            }
+          } else if (bookingForm.booking_type === 'car') {
+            if (!ktpPassportFile && !profile?.ktp_passport_url) {
+              alert(locale === 'id' ? 'Foto Paspor wajib diunggah!' : 'Passport photo is required!');
+              setBookingLoading(false);
+              return;
+            }
+            if (!simIdpFile && !profile?.sim_idp_url) {
+              alert(locale === 'id' ? 'Foto International Driving Permit (IDP) wajib diunggah untuk sewa mobil!' : 'International Driving Permit (IDP) photo is required for car rental!');
+              setBookingLoading(false);
+              return;
+            }
           }
         }
       }
@@ -1133,16 +1155,23 @@ export default function Home() {
                     </div>
                   ) : (
                     <>
-                      {/* Document 1: KTP/SIM or Passport */}
+                      {/* Document 1: KTP or Passport */}
                       <div>
-                        <label className="block text-sm font-medium text-ocean-800 mb-2">
-                          {bookingForm.nationality_type === 'WNI'
-                            ? (bookingForm.booking_type === 'car' ? 'Upload Foto KTP/SIM *' : 'Upload Foto KTP/SIM (Opsional)')
-                            : 'Upload Foto Paspor *'}
+                        <label className="block text-sm font-medium text-ocean-800 mb-2 flex items-center justify-between">
+                          <span>
+                            {bookingForm.nationality_type === 'WNI'
+                              ? 'Upload Foto KTP *'
+                              : 'Upload Foto Paspor *'}
+                          </span>
+                          {profile?.ktp_passport_url && (
+                            <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-bold">
+                              Sudah ada di profil
+                            </span>
+                          )}
                         </label>
                         <input
                           type="file"
-                          required={bookingForm.nationality_type === 'WNA' || bookingForm.booking_type === 'car'}
+                          required={!profile?.ktp_passport_url}
                           accept="image/*"
                           onChange={e => {
                             const file = e.target.files?.[0];
@@ -1154,19 +1183,28 @@ export default function Home() {
                           className="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-toska-50 file:text-toska-700 hover:file:bg-toska-100"
                         />
                         {ktpPassportPreview && (
-                          <img src={ktpPassportPreview} alt="Preview" className="mt-2 w-32 h-20 object-cover rounded-xl border border-ocean-100" />
+                          <img src={ktpPassportPreview} alt="Preview KTP/Passport" className="mt-2 w-32 h-20 object-cover rounded-xl border border-ocean-100" />
                         )}
                       </div>
 
-                      {/* Document 2: International Driving Permit (Only WNA & Car Rental) */}
-                      {bookingForm.nationality_type === 'WNA' && bookingForm.booking_type === 'car' && (
+                      {/* Document 2: SIM or IDP (Required only for Car Rental) */}
+                      {bookingForm.booking_type === 'car' && (
                         <div>
-                          <label className="block text-sm font-medium text-ocean-800 mb-2">
-                            Upload International Driving Permit (IDP) *
+                          <label className="block text-sm font-medium text-ocean-800 mb-2 flex items-center justify-between">
+                            <span>
+                              {bookingForm.nationality_type === 'WNI'
+                                ? 'Upload Foto SIM *'
+                                : 'Upload Foto International Driving Permit (IDP) *'}
+                            </span>
+                            {profile?.sim_idp_url && (
+                              <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-bold">
+                                Sudah ada di profil
+                              </span>
+                            )}
                           </label>
                           <input
                             type="file"
-                            required
+                            required={!profile?.sim_idp_url}
                             accept="image/*"
                             onChange={e => {
                               const file = e.target.files?.[0];
@@ -1178,7 +1216,7 @@ export default function Home() {
                             className="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-toska-50 file:text-toska-700 hover:file:bg-toska-100"
                           />
                           {simIdpPreview && (
-                            <img src={simIdpPreview} alt="Preview IDP" className="mt-2 w-32 h-20 object-cover rounded-xl border border-ocean-100" />
+                            <img src={simIdpPreview} alt="Preview SIM/IDP" className="mt-2 w-32 h-20 object-cover rounded-xl border border-ocean-100" />
                           )}
                         </div>
                       )}

@@ -164,19 +164,24 @@ export default function CarRentalPage() {
       const isVerified = profile?.identity_verification_status === 'VERIFIED';
       if (!isVerified) {
         if (bookingForm.nationality_type === 'WNI') {
-          if (!ktpPassportFile) {
-            alert(locale === 'id' ? 'Foto KTP/SIM wajib diunggah!' : 'KTP/SIM photo is required!');
+          if (!ktpPassportFile && !profile?.ktp_passport_url) {
+            alert(locale === 'id' ? 'Foto KTP wajib diunggah!' : 'KTP photo is required!');
+            setBookingLoading(false);
+            return;
+          }
+          if (!simIdpFile && !profile?.sim_idp_url) {
+            alert(locale === 'id' ? 'Foto SIM wajib diunggah!' : 'SIM photo is required!');
             setBookingLoading(false);
             return;
           }
         } else {
           // WNA
-          if (!ktpPassportFile) {
+          if (!ktpPassportFile && !profile?.ktp_passport_url) {
             alert(locale === 'id' ? 'Foto Paspor wajib diunggah!' : 'Passport photo is required!');
             setBookingLoading(false);
             return;
           }
-          if (!simIdpFile) {
+          if (!simIdpFile && !profile?.sim_idp_url) {
             alert(locale === 'id' ? 'Foto International Driving Permit (IDP) wajib diunggah!' : 'International Driving Permit (IDP) photo is required!');
             setBookingLoading(false);
             return;
@@ -727,14 +732,21 @@ export default function CarRentalPage() {
                   </div>
                 ) : (
                   <>
-                    {/* Doc 1: KTP/SIM or Passport */}
+                    {/* Document 1: KTP or Passport */}
                     <div>
-                      <label className="block text-sm font-medium text-ocean-800 mb-1.5">
-                        {bookingForm.nationality_type === 'WNI' ? 'Upload Foto KTP/SIM *' : 'Upload Foto Paspor *'}
+                      <label className="block text-sm font-medium text-ocean-800 mb-1.5 flex items-center justify-between">
+                        <span>
+                          {bookingForm.nationality_type === 'WNI' ? 'Upload Foto KTP *' : 'Upload Foto Paspor *'}
+                        </span>
+                        {profile?.ktp_passport_url && (
+                          <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-bold">
+                            Sudah ada di profil
+                          </span>
+                        )}
                       </label>
                       <input
                         type="file"
-                        required
+                        required={!profile?.ktp_passport_url}
                         accept="image/*"
                         onChange={e => {
                           const file = e.target.files?.[0];
@@ -746,34 +758,41 @@ export default function CarRentalPage() {
                         className="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-toska-50 file:text-toska-700 hover:file:bg-toska-100"
                       />
                       {ktpPassportPreview && (
-                        <img src={ktpPassportPreview} alt="Preview" className="mt-2 w-32 h-20 object-cover rounded-xl border border-ocean-100" />
+                        <img src={ktpPassportPreview} alt="Preview KTP/Passport" className="mt-2 w-32 h-20 object-cover rounded-xl border border-ocean-100" />
                       )}
                     </div>
 
-                    {/* Doc 2: IDP (Only WNA) */}
-                    {bookingForm.nationality_type === 'WNA' && (
-                      <div>
-                        <label className="block text-sm font-medium text-ocean-800 mb-1.5">
-                          Upload International Driving Permit (IDP) *
-                        </label>
-                        <input
-                          type="file"
-                          required
-                          accept="image/*"
-                          onChange={e => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              setSimIdpFile(file);
-                              setSimIdpPreview(URL.createObjectURL(file));
-                            }
-                          }}
-                          className="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-toska-50 file:text-toska-700 hover:file:bg-toska-100"
-                        />
-                        {simIdpPreview && (
-                          <img src={simIdpPreview} alt="Preview IDP" className="mt-2 w-32 h-20 object-cover rounded-xl border border-ocean-100" />
+                    {/* Document 2: SIM or IDP (Always required for Car Rental) */}
+                    <div>
+                      <label className="block text-sm font-medium text-ocean-800 mb-1.5 flex items-center justify-between">
+                        <span>
+                          {bookingForm.nationality_type === 'WNI'
+                            ? 'Upload Foto SIM *'
+                            : 'Upload Foto International Driving Permit (IDP) *'}
+                        </span>
+                        {profile?.sim_idp_url && (
+                          <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-bold">
+                            Sudah ada di profil
+                          </span>
                         )}
-                      </div>
-                    )}
+                      </label>
+                      <input
+                        type="file"
+                        required={!profile?.sim_idp_url}
+                        accept="image/*"
+                        onChange={e => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            setSimIdpFile(file);
+                            setSimIdpPreview(URL.createObjectURL(file));
+                          }
+                        }}
+                        className="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-toska-50 file:text-toska-700 hover:file:bg-toska-100"
+                      />
+                      {simIdpPreview && (
+                        <img src={simIdpPreview} alt="Preview SIM/IDP" className="mt-2 w-32 h-20 object-cover rounded-xl border border-ocean-100" />
+                      )}
+                    </div>
                   </>
                 )}
 
