@@ -271,7 +271,64 @@ export default function BookingManagement() {
     loadInitialData();
   }, []);
 
-  const loadBookings = async () => {
+  const checkAndAutoCompleteBookings = async (activeBookings: Booking[]) => {
+    const todayStr = new Date().toISOString().split('T')[0]; // yyyy-mm-dd
+    const toComplete: number[] = [];
+    const toExpire: number[] = [];
+
+    activeBookings.forEach(b => {
+      if (!b.date) return;
+
+      try {
+        const numMatch = b.duration.match(/\d+/);
+        const days = numMatch ? parseInt(numMatch[0], 10) : 1;
+        const startDate = new Date(b.date);
+        const endDate = new Date(startDate.setDate(startDate.getDate() + days));
+        const endDateStr = endDate.toISOString().split('T')[0];
+
+        if (endDateStr < todayStr) {
+          if (b.status === 'confirmed' || b.status === 'rescheduled') {
+            toComplete.push(b.id);
+          } else if (b.status === 'pending') {
+            toExpire.push(b.id);
+          }
+        }
+      } catch (err) {
+        console.error('Error parsing duration for booking', b.id, err);
+      }
+    });
+
+    if (toComplete.length > 0 || toExpire.length > 0) {
+      console.log(`[Auto-Status] Auto-completing: ${toComplete.length}, Auto-expiring: ${toExpire.length}`);
+      
+      try {
+        if (toComplete.length > 0) {
+          await supabase
+            .from('bookings')
+            .update({ status: 'completed' })
+            .in('id', toComplete);
+        }
+        if (toExpire.length > 0) {
+          await supabase
+            .from('bookings')
+            .update({ status: 'expired' })
+            .in('id', toExpire);
+        }
+        
+        // Refresh bookings without looping
+        loadBookings(true);
+        
+        const count = toComplete.length + toExpire.length;
+        showToast('success', locale === 'id' 
+          ? `Sistem mendeteksi & memperbarui ${count} pemesanan yang telah berlalu.`
+          : `System detected & updated ${count} past bookings.`);
+      } catch (err) {
+        console.error('Error updating past bookings:', err);
+      }
+    }
+  };
+
+  const loadBookings = async (skipAutoCheck = false) => {
     setLoading(true);
     try {
       const { data, error } = await supabase
@@ -279,7 +336,12 @@ export default function BookingManagement() {
         .select('*')
         .order('created_at', { ascending: false });
       if (error) throw error;
-      if (data) setBookings(data);
+      if (data) {
+        setBookings(data);
+        if (!skipAutoCheck) {
+          checkAndAutoCompleteBookings(data);
+        }
+      }
     } catch (err) {
       console.error('Error loading bookings:', err);
       showToast('error', t('errorOccurred'));
