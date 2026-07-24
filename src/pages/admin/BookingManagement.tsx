@@ -18,6 +18,7 @@ interface Booking {
   booking_type: 'package' | 'car';
   item_name: string;
   date: string;
+  end_date?: string | null;
   duration: string;
   notes: string;
   total_price: string;
@@ -1054,7 +1055,7 @@ export default function BookingManagement() {
                       </span>
                     </td>
                     <td className="px-6 py-4.5 font-medium text-slate-800 max-w-[200px] truncate">{b.item_name}</td>
-                    <td className="px-6 py-4.5 text-slate-600">{b.date}</td>
+                    <td className="px-6 py-4.5 text-slate-600 font-mono">{b.end_date ? `${b.date} s/d ${b.end_date}` : b.date}</td>
                     <td className="px-6 py-4.5 font-medium text-slate-600">
                       {b.duration}
                     </td>

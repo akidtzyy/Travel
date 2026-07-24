@@ -17,7 +17,8 @@ interface RecentCustomer {
   email: string;
   phone: string;
   booking_status: string;
-  created_at: string;
+  date: string;
+  end_date?: string | null;
 }
 
 export default function AdminDashboard() {
@@ -57,7 +58,8 @@ export default function AdminDashboard() {
           email: b.email,
           phone: b.phone,
           booking_status: b.status,
-          created_at: b.created_at
+          date: b.date,
+          end_date: b.end_date
         })));
       }
     } catch (err) {
@@ -208,8 +210,8 @@ export default function AdminDashboard() {
                         {getStatusLabel(cust.booking_status)}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-sm text-slate-500">
-                      {new Date(cust.created_at).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' })}
+                    <td className="px-6 py-4 text-sm text-slate-500 font-mono">
+                      {cust.end_date ? `${cust.date} s/d ${cust.end_date}` : cust.date}
                     </td>
                   </tr>
                 ))}
