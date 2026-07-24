@@ -109,12 +109,8 @@ export default async function handler(req, res) {
       paid_at,
     };
 
-    // Auto-confirm booking when payment is successful
-    if (payment_status === 'paid') {
-      updatePayload.status = 'confirmed';
-    } else if (payment_status === 'failed' || payment_status === 'expired') {
-      updatePayload.status = 'cancelled';
-    }
+    // Booking status is left to manual action by the admin.
+    // Only payment_status is updated automatically.
 
     // ── Parse booking_id from order_id ─────────────────────────────
     // order_id format: TRAVEL-{booking_id}-{timestamp}

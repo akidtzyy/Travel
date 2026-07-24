@@ -44,11 +44,8 @@ export default async function handler(req, res) {
       ...(order_id ? { order_id } : {}),
       ...(payment_type ? { payment_type } : {}),
       ...(payment_status === 'paid' ? {
-        status: 'confirmed',
         paid_at: new Date().toISOString(),
       } : {}),
-      ...(payment_status === 'pending' ? { status: 'pending' } : {}),
-      ...(payment_status === 'failed' ? { status: 'cancelled' } : {}),
     };
 
     console.log(`[payment-status] Updating booking #${booking_id}:`, JSON.stringify(updatePayload));

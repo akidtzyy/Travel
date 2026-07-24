@@ -62,6 +62,9 @@ const server = createServer(async (req, res) => {
     } else if (path === '/api/payment-webhook') {
       const { default: handler } = await import('./api/payment-webhook.js');
       await handler(mockReq, mockRes);
+    } else if (path === '/api/payment-status') {
+      const { default: handler } = await import('./api/payment-status.js');
+      await handler(mockReq, mockRes);
     } else if (path === '/api/booking') {
       const { default: handler } = await import('./api/booking.js');
       await handler(mockReq, mockRes);
