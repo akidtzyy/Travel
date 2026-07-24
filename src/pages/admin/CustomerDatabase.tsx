@@ -83,49 +83,19 @@ export default function CustomerDatabase() {
     try {
       const docs: { label: string; url: string; booking_info?: string }[] = [];
 
-      // 1. Check customer profile documents (KTP/Passport and SIM/IDP)
+      // Check customer profile documents (KTP/Passport and SIM/IDP)
       if (cust.ktp_passport_url) {
         docs.push({
-          label: cust.nationality_type === 'WNA' ? 'Dokumen Profil: Paspor (Passport)' : 'Dokumen Profil: KTP/Paspor',
+          label: cust.nationality_type === 'WNA' ? 'Foto Paspor (Passport)' : 'Foto KTP / Identitas',
           url: cust.ktp_passport_url,
-          booking_info: 'Data diunggah via registrasi / update profil'
+          booking_info: 'Dokumen utama terdaftar'
         });
       }
       if (cust.sim_idp_url) {
         docs.push({
-          label: cust.nationality_type === 'WNA' ? 'Dokumen Profil: IDP' : 'Dokumen Profil: SIM',
+          label: cust.nationality_type === 'WNA' ? 'Foto International Driving Permit (IDP)' : 'Foto SIM (Driver License)',
           url: cust.sim_idp_url,
-          booking_info: 'Data diunggah via registrasi / update profil'
-        });
-      }
-
-      // 2. Fetch all bookings for this customer to find uploaded files
-      const { data: bookings, error } = await supabase
-        .from('bookings')
-        .select('id, item_name, date, ktp_url, sim_url')
-        .eq('customer_id', cust.id)
-        .order('date', { ascending: false });
-
-      if (error) throw error;
-
-      if (bookings) {
-        bookings.forEach(b => {
-          const bookingLabel = `${b.item_name} (${new Date(b.date).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' })})`;
-          
-          if (b.ktp_url) {
-            docs.push({
-              label: cust.nationality_type === 'WNA' ? 'Foto Paspor (Booking)' : 'Foto KTP/SIM (Booking)',
-              url: b.ktp_url,
-              booking_info: bookingLabel
-            });
-          }
-          if (b.sim_url) {
-            docs.push({
-              label: cust.nationality_type === 'WNA' ? 'Foto IDP (Booking)' : 'Foto SIM (Booking)',
-              url: b.sim_url,
-              booking_info: bookingLabel
-            });
-          }
+          booking_info: 'Dokumen mengemudi terdaftar'
         });
       }
 
