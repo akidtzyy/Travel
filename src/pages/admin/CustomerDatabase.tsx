@@ -58,6 +58,12 @@ export default function CustomerDatabase() {
   });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
+  // Document Viewer State
+  const [showDocModal, setShowDocModal] = useState(false);
+  const [selectedCustDocs, setSelectedCustDocs] = useState<{ label: string; url: string; booking_info?: string }[]>([]);
+  const [selectedCustName, setSelectedCustName] = useState('');
+  const [docLoading, setDocLoading] = useState(false);
+
   // Pagination
   const [page, setPage] = useState(1);
   const perPage = 10;
@@ -66,6 +72,63 @@ export default function CustomerDatabase() {
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
 
   useEffect(() => { loadCustomers(); }, []);
+
+  const handleViewDocuments = async (cust: Customer) => {
+    setSelectedCustName(cust.full_name);
+    setSelectedCustDocs([]);
+    setShowDocModal(true);
+    setDocLoading(true);
+
+    try {
+      const docs: { label: string; url: string; booking_info?: string }[] = [];
+
+      // 1. Check customer profile document (KTP / Passport)
+      if (cust.ktp_sim_passport_url) {
+        docs.push({
+          label: cust.nationality_type === 'WNA' ? 'Dokumen Profil: Paspor' : 'Dokumen Profil: KTP/SIM',
+          url: cust.ktp_sim_passport_url,
+          booking_info: 'Data diunggah via registrasi / update profil'
+        });
+      }
+
+      // 2. Fetch all bookings for this customer to find uploaded files
+      const { data: bookings, error } = await supabase
+        .from('bookings')
+        .select('id, item_name, date, ktp_url, sim_url')
+        .eq('customer_id', cust.id)
+        .order('date', { ascending: false });
+
+      if (error) throw error;
+
+      if (bookings) {
+        bookings.forEach(b => {
+          const bookingLabel = `${b.item_name} (${new Date(b.date).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' })})`;
+          
+          if (b.ktp_url) {
+            docs.push({
+              label: cust.nationality_type === 'WNA' ? 'Foto Paspor (Booking)' : 'Foto KTP/SIM (Booking)',
+              url: b.ktp_url,
+              booking_info: bookingLabel
+            });
+          }
+          if (b.sim_url) {
+            docs.push({
+              label: cust.nationality_type === 'WNA' ? 'Foto IDP (Booking)' : 'Foto SIM (Booking)',
+              url: b.sim_url,
+              booking_info: bookingLabel
+            });
+          }
+        });
+      }
+
+      setSelectedCustDocs(docs);
+    } catch (err) {
+      console.error('Error fetching customer documents:', err);
+      showToast('error', locale === 'id' ? 'Gagal memuat dokumen' : 'Failed to load documents');
+    } finally {
+      setDocLoading(false);
+    }
+  };
 
   const loadCustomers = async () => {
     setLoading(true);
@@ -220,22 +283,18 @@ export default function CustomerDatabase() {
     URL.revokeObjectURL(url);
   };
 
-  const getStatusBadge = (status: string) => {
-    const badges: Record<string, string> = {
-      interested: 'bg-blue-50 text-blue-600 border-blue-200',
-      booked: 'bg-amber-50 text-amber-600 border-amber-200',
-      completed: 'bg-emerald-50 text-emerald-600 border-emerald-200',
-      cancelled: 'bg-red-50 text-red-600 border-red-200',
-    };
-    return badges[status] || 'bg-slate-50 text-slate-600 border-slate-200';
+  const getStatusBadge = (status: string, totalBookings = 0) => {
+    const isHasBooked = status === 'has_booked' || totalBookings > 0;
+    return isHasBooked
+      ? 'bg-emerald-50 text-emerald-600 border-emerald-200'
+      : 'bg-slate-100 text-slate-500 border-slate-200';
   };
 
-  const getStatusLabel = (status: string) => {
-    const labels: Record<string, string> = {
-      interested: t('interested'), booked: t('booked'),
-      completed: t('completed'), cancelled: t('cancelled'),
-    };
-    return labels[status] || status;
+  const getStatusLabel = (status: string, totalBookings = 0) => {
+    const isHasBooked = status === 'has_booked' || totalBookings > 0;
+    return isHasBooked
+      ? (locale === 'id' ? 'Sudah pernah booking' : 'Has booked before')
+      : (locale === 'id' ? 'Belum pernah booking' : 'Has never booked');
   };
 
   // Filter & paginate
@@ -246,7 +305,12 @@ export default function CustomerDatabase() {
       c.phone.includes(searchStr) ||
       (c.nik && c.nik.includes(searchStr)) ||
       (c.identity_number && c.identity_number.toLowerCase().includes(searchStr));
-    const matchStatus = statusFilter === 'all' || c.booking_status === statusFilter;
+    
+    const isHasBooked = c.booking_status === 'has_booked' || (c.total_bookings && c.total_bookings > 0);
+    const matchStatus = statusFilter === 'all' ||
+      (statusFilter === 'has_booked' && isHasBooked) ||
+      (statusFilter === 'never_booked' && !isHasBooked);
+
     return matchSearch && matchStatus;
   });
 
@@ -326,11 +390,9 @@ export default function CustomerDatabase() {
             onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
             className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-toska-500/30 focus:border-toska-400 outline-none"
           >
-            <option value="all">{t('all')} {t('status')}</option>
-            <option value="interested">{t('interested')}</option>
-            <option value="booked">{t('booked')}</option>
-            <option value="completed">{t('completed')}</option>
-            <option value="cancelled">{t('cancelled')}</option>
+            <option value="all">{locale === 'id' ? 'Semua Status' : 'All Status'}</option>
+            <option value="has_booked">{locale === 'id' ? 'Sudah pernah booking' : 'Has booked before'}</option>
+            <option value="never_booked">{locale === 'id' ? 'Belum pernah booking' : 'Has never booked'}</option>
           </select>
         </div>
         <div className="flex items-center gap-2 text-sm text-slate-500">
@@ -413,12 +475,19 @@ export default function CustomerDatabase() {
                     )}
                   </td>
                   <td className="px-6 py-4">
-                    <span className={`inline-flex px-2.5 py-1 rounded-lg text-xs font-semibold border ${getStatusBadge(cust.booking_status)}`}>
-                      {getStatusLabel(cust.booking_status)}
+                    <span className={`inline-flex px-2.5 py-1 rounded-lg text-xs font-semibold border ${getStatusBadge(cust.booking_status, cust.total_bookings)}`}>
+                      {getStatusLabel(cust.booking_status, cust.total_bookings)}
                     </span>
                   </td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-2">
+                      <button
+                        onClick={() => handleViewDocuments(cust)}
+                        className="p-2 hover:bg-toska-50 rounded-lg text-toska-600 transition-colors"
+                        title={locale === 'id' ? 'Lihat Dokumen KTP/Paspor/SIM' : 'View Identity/License Docs'}
+                      >
+                        <FileText className="w-4 h-4" />
+                      </button>
                       <button onClick={() => openModal(cust)} className="p-2 hover:bg-sky-50 rounded-lg text-sky-600 transition-colors" title={t('editItem')}>
                         <Pencil className="w-4 h-4" />
                       </button>
@@ -677,8 +746,8 @@ export default function CustomerDatabase() {
                 {/* Booking Status */}
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('bookingStatus')}</label>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    {(['interested', 'booked', 'completed', 'cancelled'] as const).map(status => (
+                  <div className="grid grid-cols-2 gap-2">
+                    {(['never_booked', 'has_booked'] as const).map(status => (
                       <button
                         key={status}
                         type="button"
@@ -755,6 +824,90 @@ export default function CustomerDatabase() {
               </div>
             </motion.div>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Show Documents Modal */}
+      <AnimatePresence>
+        {showDocModal && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              className="bg-white rounded-2xl w-full max-w-lg max-h-[85vh] border border-slate-200 shadow-2xl overflow-hidden flex flex-col"
+            >
+              {/* Header */}
+              <div className="px-6 py-5 bg-gradient-to-r from-slate-900 to-slate-800 text-white flex items-center justify-between">
+                <div>
+                  <h3 className="text-base font-bold flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-toska-400" />
+                    {locale === 'id' ? 'Berkas Dokumen Pelanggan' : 'Customer Identity Files'}
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">{selectedCustName}</p>
+                </div>
+                <button
+                  onClick={() => setShowDocModal(false)}
+                  className="p-1.5 hover:bg-white/10 rounded-lg text-slate-300 hover:text-white transition-all"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="p-6 overflow-y-auto space-y-4 flex-1">
+                {docLoading ? (
+                  <div className="py-12 text-center">
+                    <div className="w-8 h-8 border-2 border-toska-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                    <p className="text-xs text-slate-500">{locale === 'id' ? 'Memuat data berkas...' : 'Loading document files...'}</p>
+                  </div>
+                ) : selectedCustDocs.length === 0 ? (
+                  <div className="py-12 text-center text-slate-400">
+                    <FileText className="w-12 h-12 text-slate-200 mx-auto mb-3" />
+                    <p className="text-sm font-semibold">{locale === 'id' ? 'Tidak Ada Dokumen' : 'No Documents Found'}</p>
+                    <p className="text-xs text-slate-400 mt-1">Pelanggan belum pernah mengunggah KTP, SIM, atau Paspor.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+                      {locale === 'id' ? 'Dokumen Terdaftar' : 'Registered Documents'}
+                    </p>
+                    {selectedCustDocs.map((doc, idx) => (
+                      <div
+                        key={idx}
+                        className="p-4 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100/55 transition-all flex items-center justify-between gap-4 group"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-slate-800 truncate">{doc.label}</p>
+                          {doc.booking_info && (
+                            <p className="text-[10px] text-slate-400 font-medium mt-0.5 truncate">{doc.booking_info}</p>
+                          )}
+                        </div>
+                        <a
+                          href={doc.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-3.5 py-1.5 rounded-lg bg-toska-500 hover:bg-toska-600 text-white text-xs font-bold transition-all shrink-0 hover:shadow-md hover:shadow-toska-500/20"
+                        >
+                          {locale === 'id' ? 'Buka File' : 'Open File'}
+                        </a>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end">
+                <button
+                  onClick={() => setShowDocModal(false)}
+                  className="px-5 py-2 rounded-xl border border-slate-200 text-slate-600 text-xs font-bold hover:bg-slate-100 transition-colors"
+                >
+                  {locale === 'id' ? 'Tutup' : 'Close'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
     </div>
