@@ -1027,7 +1027,7 @@ export default function BookingManagement() {
 
       {/* Main Table */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden w-full max-w-full print:hidden">
-        <div className="overflow-x-auto w-full">
+        <div className="overflow-x-auto w-full min-h-[320px]">
           <table className="w-full border-collapse text-left min-w-[1100px]">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 text-[11px] font-semibold uppercase tracking-wider">
@@ -1114,7 +1114,7 @@ export default function BookingManagement() {
                                 className="fixed inset-0 z-40 cursor-default"
                                 onClick={() => setActiveDropdownId(null)}
                               />
-                              <div className={`absolute right-0 w-56 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1.5 text-left animate-in fade-in duration-100 ${index >= 4 ? 'bottom-full mb-2 slide-in-from-bottom-1' : 'top-full mt-2 slide-in-from-top-1'}`}>
+                              <div className={`absolute right-0 w-56 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1.5 text-left animate-in fade-in duration-100 ${index >= 4 || (pagedBookings.length > 1 && index === pagedBookings.length - 1) ? 'bottom-full mb-2 slide-in-from-bottom-1' : 'top-full mt-2 slide-in-from-top-1'}`}>
 
 
                                 {/* Print Invoice */}
