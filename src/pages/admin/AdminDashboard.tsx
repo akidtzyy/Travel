@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Package, Car, Users, CalendarCheck, TrendingUp, Clock, ArrowUpRight } from 'lucide-react';
 import { useI18n } from '../../lib/I18nContext';
-import supabase from '../../lib/supabase';
+import { apiFetch } from '../../lib/apiFetch';
 
 interface DashboardStats {
   totalPackages: number;
@@ -36,34 +36,19 @@ export default function AdminDashboard() {
 
   const loadDashboardData = async () => {
     try {
-      const [pkgRes, carRes, custRes, bookRes] = await Promise.all([
-        supabase.from('tour_packages').select('id', { count: 'exact' }),
-        supabase.from('car_rentals').select('id', { count: 'exact' }),
-        supabase.from('customers').select('id', { count: 'exact' }),
-        supabase.from('bookings').select('*').order('created_at', { ascending: false }).limit(5),
+      const [pkgRes, carRes] = await Promise.all([
+        apiFetch<{ data: any[] }>('/tour-packages'),
+        apiFetch<{ data: any[] }>('/car-rentals'),
       ]);
 
-      const totalBookingsRes = await supabase.from('bookings').select('id', { count: 'exact' });
+      setStats(prev => ({
+        ...prev,
+        totalPackages: pkgRes.data?.length ?? 0,
+        totalCars: carRes.data?.length ?? 0,
+      }));
 
-      setStats({
-        totalPackages: pkgRes.count || 0,
-        totalCars: carRes.count || 0,
-        totalCustomers: custRes.count || 0,
-        totalBookings: totalBookingsRes.count || 0,
-      });
-
-      if (bookRes.data) {
-        setRecentCustomers(bookRes.data.map((b: any) => ({
-          id: b.id,
-          full_name: b.name,
-          email: b.email,
-          phone: b.phone,
-          booking_status: b.status,
-          booking_type: b.booking_type,
-          date: b.date,
-          end_date: b.end_date
-        })));
-      }
+      // Customers and bookings stats require admin auth — kept as placeholders
+      // These will work once Sanctum auth is integrated into the admin panel
     } catch (err) {
       console.error('Dashboard error:', err);
     } finally {

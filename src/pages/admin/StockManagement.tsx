@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { useI18n } from '../../lib/I18nContext';
 import { useAuth } from '../../lib/AuthContext';
-import supabase from '../../lib/supabase';
+import { apiFetch } from '../../lib/apiFetch';
 
 interface CarItem {
   id: number;
@@ -125,8 +125,8 @@ export default function StockManagement() {
     setLoading(true);
     try {
       const [carsRes, pkgsRes] = await Promise.all([
-        supabase.from('car_rentals').select('*').order('id', { ascending: true }),
-        supabase.from('tour_packages').select('*').order('id', { ascending: true }),
+        apiFetch<{ data: any[] }>('/car-rentals'),
+        apiFetch<{ data: any[] }>('/tour-packages'),
       ]);
       if (carsRes.data) setCars(carsRes.data);
       if (pkgsRes.data) setPackages(pkgsRes.data);
@@ -181,12 +181,15 @@ export default function StockManagement() {
 
     try {
       if (editingCar) {
-        const { error } = await supabase.from('car_rentals').update(data).eq('id', editingCar.id);
-        if (error) throw error;
+        await apiFetch(`/car-rentals/${editingCar.id}`, {
+          method: 'PUT',
+          body: JSON.stringify(data),
+        });
       } else {
-        const { data: newCar, error } = await supabase.from('car_rentals').insert(data).select().single();
-        if (error) throw error;
-        if (!newCar) throw new Error('Gagal menyimpan data. Pastikan Anda memiliki izin yang cukup.');
+        await apiFetch('/car-rentals', {
+          method: 'POST',
+          body: JSON.stringify(data),
+        });
       }
       showToast('success', t('saveSuccess'));
       setShowCarModal(false);
@@ -206,9 +209,7 @@ export default function StockManagement() {
     }
 
     try {
-      const { error, count } = await supabase.from('car_rentals').delete({ count: 'exact' }).eq('id', id);
-      if (error) throw error;
-      if (count === 0) throw new Error('Gagal menghapus data. Pastikan Anda memiliki izin yang cukup.');
+      await apiFetch(`/car-rentals/${id}`, { method: 'DELETE' });
       showToast('success', t('deleteSuccess'));
       await loadData();
     } catch (err: any) {
@@ -400,12 +401,15 @@ export default function StockManagement() {
 
     try {
       if (editingPkg) {
-        const { error } = await supabase.from('tour_packages').update(data).eq('id', editingPkg.id);
-        if (error) throw error;
+        await apiFetch(`/tour-packages/${editingPkg.id}`, {
+          method: 'PUT',
+          body: JSON.stringify(data),
+        });
       } else {
-        const { data: newPkg, error } = await supabase.from('tour_packages').insert(data).select().single();
-        if (error) throw error;
-        if (!newPkg) throw new Error('Gagal menyimpan data. Pastikan Anda memiliki izin yang cukup.');
+        await apiFetch('/tour-packages', {
+          method: 'POST',
+          body: JSON.stringify(data),
+        });
       }
       showToast('success', t('saveSuccess'));
       setShowPkgModal(false);
@@ -425,9 +429,7 @@ export default function StockManagement() {
     }
 
     try {
-      const { error, count } = await supabase.from('tour_packages').delete({ count: 'exact' }).eq('id', id);
-      if (error) throw error;
-      if (count === 0) throw new Error('Gagal menghapus data. Pastikan Anda memiliki izin yang cukup.');
+      await apiFetch(`/tour-packages/${id}`, { method: 'DELETE' });
       showToast('success', t('deleteSuccess'));
       await loadData();
     } catch (err: any) {
@@ -445,9 +447,11 @@ export default function StockManagement() {
     }
 
     try {
-      const table = type === 'cars' ? 'car_rentals' : 'tour_packages';
-      const { error } = await supabase.from(table).update({ is_available: !current }).eq('id', id);
-      if (error) throw error;
+      const endpoint = type === 'cars' ? `/car-rentals/${id}` : `/tour-packages/${id}`;
+      await apiFetch(endpoint, {
+        method: 'PUT',
+        body: JSON.stringify({ is_available: !current }),
+      });
       showToast('success', t('saveSuccess'));
       await loadData();
     } catch (err: any) {

@@ -4,7 +4,7 @@ import { Car, Users, Clock, CheckCircle, Send, ArrowLeft, Fuel, Settings, AlertT
 import { Link } from 'react-router-dom';
 import Lenis from 'lenis';
 import Footer from '../components/Footer';
-import supabase from '../lib/supabase';
+import { apiFetch } from '../lib/apiFetch';
 import { useAuth } from '../lib/AuthContext';
 import { useI18n } from '../lib/I18nContext';
 
@@ -80,12 +80,8 @@ export default function CarRentalPage() {
   useEffect(() => {
     const loadCars = async () => {
       try {
-        const { data, error } = await supabase
-          .from('car_rentals')
-          .select('*')
-          .order('price', { ascending: true });
-        if (error) throw error;
-        if (data) setCars(data);
+        const res = await apiFetch<{ data: CarRental[] }>('/car-rentals');
+        if (res.data) setCars(res.data);
       } catch (err) {
         console.error('Error loading cars:', err);
       } finally {
@@ -211,22 +207,17 @@ export default function CarRentalPage() {
     });
   };
 
-  const uploadDoc = async (file: File, folder: string): Promise<string | null> => {
-    let fileToUpload: Blob = file;
+  /**
+   * Prepare a document file for upload: apply watermark then return the processed Blob.
+   * Actual upload is bundled into the booking FormData request.
+   */
+  const prepareDoc = async (file: File): Promise<Blob> => {
     try {
-      fileToUpload = await applyWatermark(file);
+      return await applyWatermark(file);
     } catch (e) {
       console.warn('Failed to apply watermark, using original:', e);
+      return file;
     }
-
-    const ext = file.name.split('.').pop();
-    const path = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-    const { error } = await supabase.storage
-      .from('booking-documents')
-      .upload(path, fileToUpload, { contentType: file.type, upsert: false });
-    if (error) { console.error('Upload error:', error); return null; }
-    const { data } = supabase.storage.from('booking-documents').getPublicUrl(path);
-    return data.publicUrl;
   };
 
   const handleBooking = async (e: React.FormEvent) => {
@@ -234,10 +225,7 @@ export default function CarRentalPage() {
     setBookingLoading(true);
 
     try {
-      const cleanPhone = bookingForm.phone.replace(/\D/g, '');
-      const notesWithDetails = `Tipe: Sewa Mobil\nKendaraan: ${bookingForm.item_name}\nDurasi: ${bookingForm.duration}\nTanggal Sewa: ${bookingForm.date}\nHarga: ${bookingForm.total_price}\nCatatan: ${bookingForm.notes}`;
-
-      // 1. Validation for uploads
+      // 1. Validation for document uploads
       const isVerified = profile?.identity_verification_status === 'VERIFIED';
       if (!isVerified) {
         if (bookingForm.nationality_type === 'WNI') {
@@ -266,112 +254,52 @@ export default function CarRentalPage() {
         }
       }
 
-      // 2. Upload documents
-      let ktpPassportUrl = profile?.ktp_passport_url || null;
-      let simIdpUrl = profile?.sim_idp_url || null;
+      // 2. Resolve item_id and quantity from selection
+      if (!selectedCarId) throw new Error('Pilih kendaraan terlebih dahulu.');
+      const days = getRentalDays(bookingForm.date, bookingForm.end_date);
 
+      // 3. Build FormData for multipart request (includes optional document files)
+      const formData = new FormData();
+      formData.append('name',             bookingForm.name);
+      formData.append('email',            bookingForm.email);
+      formData.append('phone',            bookingForm.phone);
+      formData.append('booking_type',     'car_rental');
+      formData.append('item_id',          String(selectedCarId));
+      formData.append('item_name',        bookingForm.item_name);
+      formData.append('date',             bookingForm.date);
+      formData.append('duration',         bookingForm.duration);
+      formData.append('quantity',         String(days));
+      formData.append('payment_type',     bookingForm.payment_type || 'FULL');
+      formData.append('nationality_type', bookingForm.nationality_type);
+      formData.append('identity_type',    bookingForm.identity_type);
+      if (bookingForm.identity_number) formData.append('identity_number', bookingForm.identity_number);
+      if (bookingForm.notes)           formData.append('notes', bookingForm.notes);
+
+      // Attach watermarked documents if provided
       if (!isVerified) {
         if (ktpPassportFile) {
-          const folder = bookingForm.nationality_type === 'WNI' ? 'ktp' : 'passport';
-          ktpPassportUrl = await uploadDoc(ktpPassportFile, folder);
+          const processed = await prepareDoc(ktpPassportFile);
+          formData.append('ktp_passport_file', processed, ktpPassportFile.name);
         }
         if (simIdpFile) {
-          const folder = bookingForm.nationality_type === 'WNI' ? 'sim' : 'idp';
-          simIdpUrl = await uploadDoc(simIdpFile, folder);
+          const processed = await prepareDoc(simIdpFile);
+          formData.append('sim_idp_file', processed, simIdpFile.name);
         }
       }
 
-      // 3. Find or Create Customer
-      let customerId = null;
-      const { data: existingCust } = await supabase
-        .from('customers')
-        .select('id')
-        .or(`email.eq.${bookingForm.email},phone.eq.${cleanPhone}`)
-        .limit(1);
+      // 4. Send booking to Laravel API
+      const token = localStorage.getItem('laravel_token');
+      const headers: Record<string, string> = { Accept: 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
 
-      if (existingCust && existingCust.length > 0) {
-        customerId = existingCust[0].id;
-        await supabase.from('customers').update({
-          full_name: bookingForm.name,
-          phone: cleanPhone,
-          email: bookingForm.email,
-          nationality_type: bookingForm.nationality_type,
-          identity_type: bookingForm.identity_type,
-          identity_number: bookingForm.identity_number,
-          country_origin: bookingForm.country_origin || null,
-          ...(ktpPassportUrl ? { ktp_passport_url: ktpPassportUrl } : {}),
-          ...(simIdpUrl ? { sim_idp_url: simIdpUrl } : {}),
-          user_id: user?.id || null,
-          updated_at: new Date().toISOString()
-        }).eq('id', customerId);
-      } else {
-        const { data: newCust, error: custErr } = await supabase
-          .from('customers')
-          .insert({
-            full_name: bookingForm.name,
-            phone: cleanPhone,
-            email: bookingForm.email,
-            nationality_type: bookingForm.nationality_type,
-            identity_type: bookingForm.identity_type,
-            identity_number: bookingForm.identity_number,
-            country_origin: bookingForm.country_origin || null,
-            ktp_passport_url: ktpPassportUrl,
-            sim_idp_url: simIdpUrl,
-            identity_verification_status: 'UNVERIFIED',
-            booking_status: 'booked',
-            user_id: user?.id || null,
-            notes: notesWithDetails
-          })
-          .select('id')
-          .single();
-        if (custErr) throw custErr;
-        customerId = newCust.id;
-      }
-
-      // 4. Create Snapshot
-      const snapshot = {
-        name: bookingForm.name,
-        email: bookingForm.email,
-        phone: cleanPhone,
-        nationality_type: bookingForm.nationality_type,
-        identity_type: bookingForm.identity_type,
-        identity_number: bookingForm.identity_number,
-        country_origin: bookingForm.country_origin || null,
-        ktp_passport_url: ktpPassportUrl || null,
-        sim_idp_url: simIdpUrl || null,
-        item_name: bookingForm.item_name,
-        total_price: bookingForm.total_price,
-      };
-
-      // 5. Insert Booking
-      const rawTotalPrice = bookingForm.total_price.replace(/[^0-9]/g, '');
-      const totalAmountNum = parseInt(rawTotalPrice, 10) || 0;
-      const bookingPaymentType = bookingForm.payment_type || 'FULL';
-
-      const { error: bookingErr } = await supabase.from('bookings').insert({
-        customer_id: customerId,
-        nik: bookingForm.nationality_type === 'WNI' ? bookingForm.identity_number : '',
-        name: bookingForm.name,
-        email: bookingForm.email,
-        phone: cleanPhone,
-        booking_type: 'car',
-        item_name: bookingForm.item_name,
-        date: bookingForm.date,
-        end_date: bookingForm.end_date || null,
-        duration: bookingForm.duration,
-        notes: bookingForm.notes,
-        total_price: bookingForm.total_price,
-        status: 'pending',
-        payment_status: 'unpaid',
-        payment_type: bookingPaymentType,
-        total_amount: totalAmountNum,
-        amount_paid: 0,
-        remaining_balance: totalAmountNum,
-        ktp_url: ktpPassportUrl || null,
-        sim_url: simIdpUrl || null,
-        booking_details_snapshot: snapshot
+      const res = await fetch('/api/v1/bookings', {
+        method: 'POST',
+        headers,
+        body: formData,
       });
-      if (bookingErr) throw bookingErr;
+
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json?.message ?? `HTTP ${res.status}`);
 
       setBookingSuccess(true);
 

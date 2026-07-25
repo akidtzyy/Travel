@@ -8,7 +8,7 @@ import PackageCard from '../components/PackageCard';
 import Footer from '../components/Footer';
 import PaymentModal, { type PaymentStep } from '../components/PaymentModal';
 import { openSnapPayment } from '../lib/midtrans';
-import supabase from '../lib/supabase';
+import { apiFetch } from '../lib/apiFetch';
 import { useAuth } from '../lib/AuthContext';
 import { useI18n } from '../lib/I18nContext';
 
@@ -181,21 +181,19 @@ export default function Home() {
       try {
         setLoading(true);
 
-        const { data: pkgs, error: pkgErr } = await supabase.from('tour_packages').select('*').eq('is_available', true);
-        console.log("Data paket dari Supabase:", pkgs);
-        const { data: dests, error: destErr } = await supabase.from('destinations').select('*');
-        const { data: cars } = await supabase.from('car_rentals').select('*').eq('is_available', true);
-        const { data: tests } = await supabase.from('testimonials').select('*');
-        const { data: faqData } = await supabase.from('faqs').select('*');
+        const [pkgRes, destRes, carRes, testRes, faqRes] = await Promise.all([
+          apiFetch<{ data: any[] }>('/tour-packages'),
+          apiFetch<{ data: any[] }>('/destinations'),
+          apiFetch<{ data: any[] }>('/car-rentals?is_available=true'),
+          apiFetch<{ data: any[] }>('/testimonials'),
+          apiFetch<{ data: any[] }>('/faqs'),
+        ]);
 
-        if (pkgErr) console.error("Error paket:", pkgErr);
-        if (destErr) console.error("Error destinasi:", destErr);
-
-        if (pkgs) setPackages(pkgs);
-        if (cars) setCarRentals(cars);
-        if (dests) setDestinations(dests);
-        if (tests) setTestimonials(tests);
-        if (faqData) setFaqs(faqData);
+        if (pkgRes.data) setPackages(pkgRes.data);
+        if (carRes.data) setCarRentals(carRes.data);
+        if (destRes.data) setDestinations(destRes.data);
+        if (testRes.data) setTestimonials(testRes.data);
+        if (faqRes.data) setFaqs(faqRes.data);
 
       } catch (err) {
         console.error("Gagal mengambil data:", err);
@@ -361,22 +359,17 @@ export default function Home() {
     });
   };
 
-  const uploadDoc = async (file: File, folder: string): Promise<string | null> => {
-    let fileToUpload: Blob = file;
+  /**
+   * Prepare a document file for upload: apply watermark then return the processed Blob.
+   * Actual upload is bundled into the booking FormData request.
+   */
+  const prepareDoc = async (file: File): Promise<Blob> => {
     try {
-      fileToUpload = await applyWatermark(file);
+      return await applyWatermark(file);
     } catch (e) {
       console.warn('Failed to apply watermark, using original:', e);
+      return file;
     }
-
-    const ext = file.name.split('.').pop();
-    const path = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-    const { error } = await supabase.storage
-      .from('booking-documents')
-      .upload(path, fileToUpload, { contentType: file.type, upsert: false });
-    if (error) { console.error('Upload error:', error); return null; }
-    const { data } = supabase.storage.from('booking-documents').getPublicUrl(path);
-    return data.publicUrl;
   };
 
   const handleBooking = async (e: React.FormEvent) => {
@@ -384,10 +377,7 @@ export default function Home() {
     setBookingLoading(true);
 
     try {
-      const cleanPhone = bookingForm.phone.replace(/\D/g, '');
-      const notesWithDetails = `Tipe: ${bookingForm.booking_type === 'package' ? 'Paket Wisata' : 'Sewa Mobil'}\nItem: ${bookingForm.item_name}\nJumlah/Durasi: ${bookingForm.duration}\nTanggal: ${bookingForm.date}\nHarga: ${bookingForm.total_price}\nCatatan: ${bookingForm.notes}`;
-
-      // 1. Validation for uploads
+      // 1. Validation for document uploads
       const isVerified = profile?.identity_verification_status === 'VERIFIED';
       if (!isVerified) {
         if (bookingForm.nationality_type === 'WNI') {
@@ -433,122 +423,84 @@ export default function Home() {
         }
       }
 
-      // 2. Upload documents if needed
-      let ktpPassportUrl = profile?.ktp_passport_url || null;
-      let simIdpUrl = profile?.sim_idp_url || null;
+      // 2. Resolve item_id and quantity from selections
+      //    Backend calculates server-side price from item_id + quantity.
+      const isPackage = bookingForm.booking_type === 'package';
+      const itemId = isPackage ? selectedPkgId : selectedCarId;
+      if (!itemId) throw new Error('Pilih paket atau kendaraan terlebih dahulu.');
 
+      // quantity: pax number for packages, rental days for cars
+      let quantity = 1;
+      if (isPackage && selectedPaxKey) {
+        quantity = getPaxMultiplier(selectedPaxKey);
+      } else if (!isPackage) {
+        quantity = getRentalDays(bookingForm.date, bookingForm.end_date);
+      }
+
+      // booking_type must match backend enum: 'package' | 'car_rental'
+      const backendBookingType = isPackage ? 'package' : 'car_rental';
+
+      // 3. Build FormData to support optional document uploads
+      const formData = new FormData();
+      formData.append('name',             bookingForm.name);
+      formData.append('email',            bookingForm.email);
+      formData.append('phone',            bookingForm.phone);
+      formData.append('booking_type',     backendBookingType);
+      formData.append('item_id',          String(itemId));
+      formData.append('item_name',        bookingForm.item_name);
+      formData.append('date',             bookingForm.date);
+      formData.append('duration',         bookingForm.duration);
+      formData.append('quantity',         String(quantity));
+      formData.append('payment_type',     bookingForm.payment_type || 'FULL');
+      formData.append('nationality_type', bookingForm.nationality_type);
+      formData.append('identity_type',    bookingForm.identity_type);
+      if (bookingForm.identity_number) {
+        formData.append('identity_number', bookingForm.identity_number);
+      }
+      if (bookingForm.notes) {
+        formData.append('notes', bookingForm.notes);
+      }
+
+      // Attach watermarked documents if provided
       if (!isVerified) {
         if (ktpPassportFile) {
-          const folder = bookingForm.nationality_type === 'WNI' ? 'ktp' : 'passport';
-          ktpPassportUrl = await uploadDoc(ktpPassportFile, folder);
+          const processed = await prepareDoc(ktpPassportFile);
+          formData.append('ktp_passport_file', processed, ktpPassportFile.name);
         }
         if (simIdpFile) {
-          const folder = bookingForm.nationality_type === 'WNI' ? 'sim' : 'idp';
-          simIdpUrl = await uploadDoc(simIdpFile, folder);
+          const processed = await prepareDoc(simIdpFile);
+          formData.append('sim_idp_file', processed, simIdpFile.name);
         }
       }
 
-      // 3. Find or Create Customer
-      let customerId = null;
-      const { data: existingCust } = await supabase
-        .from('customers')
-        .select('id')
-        .or(`email.eq.${bookingForm.email},phone.eq.${cleanPhone}`)
-        .limit(1);
+      // 4. Send booking to Laravel API
+      const token = localStorage.getItem('laravel_token');
+      const headers: Record<string, string> = { Accept: 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
 
-      if (existingCust && existingCust.length > 0) {
-        customerId = existingCust[0].id;
-        await supabase.from('customers').update({
-          full_name: bookingForm.name,
-          phone: cleanPhone,
-          email: bookingForm.email,
-          nationality_type: bookingForm.nationality_type,
-          identity_type: bookingForm.identity_type,
-          identity_number: bookingForm.identity_number,
-          country_origin: bookingForm.country_origin || null,
-          ...(ktpPassportUrl ? { ktp_passport_url: ktpPassportUrl } : {}),
-          ...(simIdpUrl ? { sim_idp_url: simIdpUrl } : {}),
-          user_id: user?.id || null,
-          updated_at: new Date().toISOString()
-        }).eq('id', customerId);
-      } else {
-        const { data: newCust, error: custErr } = await supabase
-          .from('customers')
-          .insert({
-            full_name: bookingForm.name,
-            phone: cleanPhone,
-            email: bookingForm.email,
-            nationality_type: bookingForm.nationality_type,
-            identity_type: bookingForm.identity_type,
-            identity_number: bookingForm.identity_number,
-            country_origin: bookingForm.country_origin || null,
-            ktp_passport_url: ktpPassportUrl,
-            sim_idp_url: simIdpUrl,
-            identity_verification_status: 'UNVERIFIED',
-            booking_status: 'booked',
-            user_id: user?.id || null,
-            notes: notesWithDetails
-          })
-          .select('id')
-          .single();
-        if (custErr) throw custErr;
-        customerId = newCust.id;
+      const res = await fetch('/api/v1/bookings', {
+        method: 'POST',
+        headers,
+        body: formData,
+      });
+
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const msg = json?.message ?? `HTTP ${res.status}`;
+        throw new Error(msg);
       }
 
-      // 4. Create Snapshot
-      const snapshot = {
-        name: bookingForm.name,
-        email: bookingForm.email,
-        phone: cleanPhone,
-        nationality_type: bookingForm.nationality_type,
-        identity_type: bookingForm.identity_type,
-        identity_number: bookingForm.identity_number,
-        country_origin: bookingForm.country_origin || null,
-        ktp_passport_url: ktpPassportUrl || null,
-        sim_idp_url: simIdpUrl || null,
-        item_name: bookingForm.item_name,
-        total_price: bookingForm.total_price,
-      };
+      const bookingId = json?.data?.id;
+      if (!bookingId) throw new Error('Booking ID tidak ditemukan dari response.');
 
-      // 5. Insert Booking
-      const rawTotalPrice = bookingForm.total_price.replace(/[^0-9]/g, '');
-      const totalAmountNum = parseInt(rawTotalPrice, 10) || 0;
-      const bookingPaymentType = bookingForm.payment_type || 'FULL';
-
-      const { data: bookingData, error: bookingErr } = await supabase
-        .from('bookings')
-        .insert({
-          customer_id: customerId,
-          nik: bookingForm.nationality_type === 'WNI' ? bookingForm.identity_number : '',
-          name: bookingForm.name,
-          email: bookingForm.email,
-          phone: cleanPhone,
-          booking_type: bookingForm.booking_type === 'package' ? 'package' : 'car',
-          item_name: bookingForm.item_name,
-          date: bookingForm.date,
-          end_date: bookingForm.booking_type === 'car' && bookingForm.end_date ? bookingForm.end_date : null,
-          duration: bookingForm.duration,
-          notes: bookingForm.notes,
-          total_price: bookingForm.total_price,
-          status: 'pending',
-          payment_status: 'unpaid',
-          payment_type: bookingPaymentType,
-          total_amount: totalAmountNum,
-          amount_paid: 0,
-          remaining_balance: totalAmountNum,
-          ktp_url: ktpPassportUrl || null,
-          sim_url: simIdpUrl || null,
-          booking_details_snapshot: snapshot
-        })
-        .select('id')
-        .single();
-      if (bookingErr) throw bookingErr;
-
-      setPendingBookingId(bookingData.id);
+      setPendingBookingId(bookingId);
       setPaymentStep('confirm');
       setBookingSuccess(true);
     } catch (err) {
       console.error('Gagal menyimpan data booking ke database:', err);
+      alert(locale === 'id'
+        ? `Gagal membuat booking: ${(err as Error).message}`
+        : `Failed to create booking: ${(err as Error).message}`);
     } finally {
       setBookingLoading(false);
     }
@@ -559,15 +511,13 @@ export default function Home() {
     setPaymentStep('processing');
 
     // Helper: update booking status directly from frontend (reliable fallback)
-    const updateBookingStatus = async (status: string, orderId?: string) => {
+    const updateBookingStatus = async (status: string) => {
       try {
-        await fetch('/api/payment-status', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+        await apiFetch(`/bookings/${pendingBookingId}`, {
+          method: 'PUT',
           body: JSON.stringify({
-            booking_id: pendingBookingId,
             payment_status: status,
-            ...(orderId ? { order_id: orderId } : {}),
+            status: status === 'paid' ? 'confirmed' : 'pending',
           }),
         });
       } catch (e) {
@@ -576,38 +526,35 @@ export default function Home() {
     };
 
     try {
-      // Get snap token from our API
-      const res = await fetch('/api/payment', {
+      // Get snap token from Laravel backend API
+      const responseData = await apiFetch('/payments/snap-token', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           booking_id: pendingBookingId,
-          payment_type: bookingForm.payment_type || 'FULL',
         }),
       });
-      const responseData = await res.json();
-      const { snap_token, order_id, error, details } = responseData;
+      
+      const { snap_token, order_id } = responseData.data || {};
 
-      if (!res.ok || !snap_token) {
-        console.error('Payment API error:', error, details);
-        throw new Error(error || 'Gagal mendapatkan token pembayaran');
+      if (!snap_token) {
+        throw new Error('Gagal mendapatkan token pembayaran');
       }
 
       // Open Midtrans Snap popup
       await openSnapPayment(snap_token, {
         onSuccess: async () => {
           // Update DB directly — don't rely solely on webhook
-          await updateBookingStatus('paid', order_id);
+          await updateBookingStatus('paid');
           setPaymentStep('success');
           resetBookingForm();
         },
         onPending: async () => {
-          await updateBookingStatus('pending', order_id);
+          await updateBookingStatus('pending');
           setPaymentStep('pending');
           resetBookingForm();
         },
         onError: async () => {
-          await updateBookingStatus('failed', order_id);
+          await updateBookingStatus('failed');
           setPaymentStep('failed');
         },
         onClose: () => {

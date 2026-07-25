@@ -5,10 +5,10 @@ import {
   CheckCircle, XCircle, AlertTriangle, Crown, UserCircle,
   ChevronLeft, ChevronRight, Mail, Calendar, Lock
 } from 'lucide-react';
-import supabase from '../../lib/supabase';
 import { useAuth } from '../../lib/AuthContext';
 import { useI18n } from '../../lib/I18nContext';
 import type { UserRole } from '../../lib/AuthContext';
+import { apiFetch } from '../../lib/apiFetch';
 
 interface UserProfile {
   id: string;
@@ -69,17 +69,12 @@ export default function UserManagement() {
   const loadUsers = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .order('role', { ascending: true })   // super_admin first alphabetically? We'll sort manually
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
+      const res = await apiFetch<{ data: UserProfile[] }>('/admin/users');
+      const data = res.data || [];
 
       // Sort: super_admin → admin → user
       const roleOrder: Record<UserRole, number> = { super_admin: 0, admin: 1, user: 2 };
-      const sorted = (data as UserProfile[]).sort((a, b) => roleOrder[a.role] - roleOrder[b.role]);
+      const sorted = [...data].sort((a, b) => roleOrder[a.role] - roleOrder[b.role]);
       setUsers(sorted);
     } catch (err: any) {
       showToast('error', isId ? 'Gagal memuat daftar user' : 'Failed to load users');
@@ -140,18 +135,13 @@ export default function UserManagement() {
     setRoleChanging(prev => ({ ...prev, [userId]: true }));
 
     try {
-      const res = await fetch('/api/update-role', {
+      const data = await apiFetch('/admin/update-role', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          target_user_id: userId,
-          new_role: newRole,
-          requester_id: currentUser.id,
+          user_id: userId,
+          role: newRole,
         }),
       });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Unknown error');
 
       // Optimistic update
       setUsers(prev => prev.map(u => u.id === userId ? { ...u, role: newRole } : u));

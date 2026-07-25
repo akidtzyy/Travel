@@ -8,7 +8,8 @@ import {
   MoreVertical
 } from 'lucide-react';
 import { useI18n } from '../../lib/I18nContext';
-import supabase from '../../lib/supabase';
+import supabase from '../../lib/supabase'; // Masih digunakan untuk ops yang belum ada endpoint backend
+import { apiFetch } from '../../lib/apiFetch';
 
 interface Booking {
   id: number;
@@ -264,13 +265,8 @@ export default function BookingManagement() {
       return;
     }
     try {
-      const { data, error } = await supabase
-        .from('customers')
-        .select('*')
-        .or(`full_name.ilike.%${query}%,phone.ilike.%${query}%,email.ilike.%${query}%`)
-        .limit(5);
-      if (error) throw error;
-      setCustSuggestions(data || []);
+      const res = await apiFetch<{ data: any[] }>(`/customers/search?query=${encodeURIComponent(query)}`);
+      setCustSuggestions(res.data || []);
     } catch (err) {
       console.error('Error fetching customer suggestions:', err);
     }
@@ -281,16 +277,16 @@ export default function BookingManagement() {
       ...prev,
       customer_id: cust.id,
       nik: cust.identity_number || cust.nik || '',
-      name: cust.full_name,
-      email: cust.email,
-      phone: cust.phone,
+      name: cust.full_name || cust.name || '',
+      email: cust.email || '',
+      phone: cust.phone || '',
       nationality_type: cust.nationality_type || 'WNI',
       identity_type: cust.identity_type || 'NIK',
       identity_number: cust.identity_number || cust.nik || '',
       country_origin: cust.country_origin || '',
     }));
     setSelectedCustVerificationStatus(cust.identity_verification_status || 'UNVERIFIED');
-    setSelectedCustKtpPassportUrl(cust.ktp_passport_url || null);
+    setSelectedCustKtpPassportUrl(cust.ktp_passport_url || cust.identity_photo_path || null);
     setSelectedCustSimIdpUrl(cust.sim_idp_url || null);
     setCustSearchQuery('');
     setCustSuggestions([]);
@@ -412,17 +408,12 @@ export default function BookingManagement() {
 
   const loadInitialData = async () => {
     try {
-      const { data: pkgs } = await supabase
-        .from('tour_packages')
-        .select('*')
-        .eq('is_available', true);
-      if (pkgs) setPackages(pkgs);
-
-      const { data: carData } = await supabase
-        .from('car_rentals')
-        .select('*')
-        .eq('is_available', true);
-      if (carData) setCars(carData);
+      const [pkgsRes, carsRes] = await Promise.all([
+        apiFetch<{ data: any[] }>('/tour-packages'),
+        apiFetch<{ data: any[] }>('/car-rentals?is_available=true'),
+      ]);
+      if (pkgsRes.data) setPackages(pkgsRes.data);
+      if (carsRes.data) setCars(carsRes.data);
     } catch (err) {
       console.error('Error loading initial database items:', err);
     }
@@ -465,16 +456,20 @@ export default function BookingManagement() {
       
       try {
         if (toComplete.length > 0) {
-          await supabase
-            .from('bookings')
-            .update({ status: 'completed' })
-            .in('id', toComplete);
+          await Promise.all(toComplete.map(id =>
+            apiFetch(`/bookings/${id}`, {
+              method: 'PUT',
+              body: JSON.stringify({ status: 'completed' })
+            })
+          ));
         }
         if (toExpire.length > 0) {
-          await supabase
-            .from('bookings')
-            .update({ status: 'expired' })
-            .in('id', toExpire);
+          await Promise.all(toExpire.map(id =>
+            apiFetch(`/bookings/${id}`, {
+              method: 'PUT',
+              body: JSON.stringify({ status: 'expired' })
+            })
+          ));
         }
         
         // Refresh bookings without looping
@@ -493,15 +488,24 @@ export default function BookingManagement() {
   const loadBookings = async (skipAutoCheck = false) => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('bookings')
-        .select('*')
-        .order('created_at', { ascending: false });
-      if (error) throw error;
-      if (data) {
-        setBookings(data);
+      const res = await apiFetch<{ data: any[] }>('/bookings');
+      if (res && res.data) {
+        const mapped = res.data.map((b: any) => ({
+          ...b,
+          name: b.name || b.customer?.name || '',
+          email: b.email || b.customer?.email || '',
+          phone: b.phone || b.customer?.phone || '',
+          nik: b.nik || b.customer?.identity_number || '',
+          nationality_type: b.nationality_type || b.customer?.nationality_type || 'WNI',
+          identity_type: b.identity_type || b.customer?.identity_type || 'NIK',
+          identity_number: b.identity_number || b.customer?.identity_number || '',
+          country_origin: b.country_origin || b.customer?.country_origin || '',
+          ktp_url: b.ktp_url || b.customer?.ktp_passport_url || null,
+          sim_url: b.sim_url || b.customer?.sim_idp_url || null,
+        }));
+        setBookings(mapped);
         if (!skipAutoCheck) {
-          checkAndAutoCompleteBookings(data);
+          checkAndAutoCompleteBookings(mapped);
         }
       }
     } catch (err) {
@@ -527,8 +531,10 @@ export default function BookingManagement() {
 
       // Only update booking status (admin doc approval)
       // DO NOT touch payment_status — that is managed by Midtrans webhook
-      const { error } = await supabase.from('bookings').update({ status: value }).eq('id', id);
-      if (error) throw error;
+      await apiFetch(`/bookings/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ status: value })
+      });
 
       showToast('success', t('bookingSaved'));
     } catch (err: any) {
@@ -545,18 +551,15 @@ export default function BookingManagement() {
 
     try {
       const originalDate = rescheduleBooking.date;
-      const { error } = await supabase
-        .from('bookings')
-        .update({
+      await apiFetch(`/bookings/${rescheduleBooking.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({
           date: newRescheduleDate,
           original_booking_date: originalDate,
           status: 'rescheduled',
           reschedule_notes: rescheduleNotes,
-          updated_at: new Date().toISOString()
         })
-        .eq('id', rescheduleBooking.id);
-
-      if (error) throw error;
+      });
 
       showToast('success', locale === 'id' ? 'Pemesanan berhasil di-reschedule!' : 'Booking successfully rescheduled!');
       setShowRescheduleModal(false);
@@ -572,20 +575,8 @@ export default function BookingManagement() {
 
   const deleteBooking = async (id: number) => {
     try {
-      const { error } = await supabase.from('bookings').delete().eq('id', id);
-      if (error) throw error;
+      await apiFetch(`/bookings/${id}`, { method: 'DELETE' });
       showToast('success', t('bookingDeleted'));
-
-      // Reset sequence after every delete so next ID follows max(id) + 1
-      // If table becomes empty, sequence resets to 1
-      // This is handled automatically by the DB trigger, but we call RPC
-      // as a safety net in case the trigger is not installed
-      try {
-        await supabase.rpc('reset_bookings_sequence');
-      } catch (rpcErr) {
-        console.warn('reset_bookings_sequence RPC not available (trigger handles it):', rpcErr);
-      }
-
       loadBookings();
     } catch (err: any) {
       console.error('Error deleting booking:', err);
@@ -726,107 +717,42 @@ export default function BookingManagement() {
       }
 
       // Find or Create Customer record
-      let customerId = addForm.customer_id;
       const cleanPhone = addForm.phone.replace(/\D/g, '');
-      const notesWithDetails = `Tipe: ${addForm.booking_type === 'package' ? 'Paket Wisata' : 'Sewa Mobil'}\nItem: ${addForm.item_name}\nJumlah/Durasi: ${addForm.duration}\nTanggal: ${addForm.date}\nHarga: ${addForm.total_price}\nCatatan: ${addForm.notes}`;
-
-      if (!customerId) {
-        const { data: existingCust } = await supabase
-          .from('customers')
-          .select('id, identity_verification_status')
-          .or(`email.eq.${addForm.email},phone.eq.${cleanPhone}`)
-          .limit(1);
-
-        if (existingCust && existingCust.length > 0) {
-          customerId = existingCust[0].id;
-          await supabase.from('customers').update({
-            full_name: addForm.name,
-            phone: cleanPhone,
-            email: addForm.email,
-            nationality_type: addForm.nationality_type,
-            identity_type: addForm.identity_type,
-            identity_number: addForm.identity_number,
-            country_origin: addForm.country_origin || null,
-            ...(ktp_url ? { ktp_passport_url: ktp_url } : {}),
-            ...(sim_url ? { sim_idp_url: sim_url } : {}),
-            updated_at: new Date().toISOString()
-          }).eq('id', customerId);
-        } else {
-          const { data: newCust, error: custErr } = await supabase.from('customers').insert({
-            full_name: addForm.name,
-            phone: cleanPhone,
-            email: addForm.email,
-            nationality_type: addForm.nationality_type,
-            identity_type: addForm.identity_type,
-            identity_number: addForm.identity_number,
-            country_origin: addForm.country_origin || null,
-            ktp_passport_url: ktp_url || null,
-            sim_idp_url: sim_url || null,
-            identity_verification_status: 'UNVERIFIED',
-            booking_status: 'booked',
-            notes: notesWithDetails
-          }).select('id').single();
-          
-          if (custErr) throw custErr;
-          customerId = newCust.id;
-        }
-      }
-
-      // Create Snapshot
-      const snapshot = {
-        name: addForm.name,
-        email: addForm.email,
-        phone: cleanPhone,
-        nationality_type: addForm.nationality_type,
-        identity_type: addForm.identity_type,
-        identity_number: addForm.identity_number,
-        country_origin: addForm.country_origin || null,
-        ktp_passport_url: ktp_url || null,
-        sim_idp_url: sim_url || null,
-        item_name: addForm.item_name,
-        total_price: addForm.total_price,
-      };
-
-      // Insert Booking linked to customerId
-      const rawPrice = addForm.total_price.replace(/[^0-9]/g, '');
-      const totalAmountNum = parseInt(rawPrice, 10) || 0;
       const bookingPaymentType = addForm.payment_type || 'FULL';
-      const amountPaidNum = 0;
-      const remainingBalanceNum = totalAmountNum;
+      
+      const quantity = addForm.booking_type === 'package' 
+        ? (parseInt(selectedPaxKey, 10) || 1) 
+        : (getRentalDays(addForm.date, addForm.end_date) || 1);
 
-      const { data: bookingData, error: bookingErr } = await supabase.from('bookings').insert({
-        customer_id: customerId,
-        nik: addForm.nationality_type === 'WNI' ? addForm.identity_number : '',
-        name: addForm.name,
-        email: addForm.email,
-        phone: cleanPhone,
-        booking_type: addForm.booking_type,
-        item_name: addForm.item_name,
-        date: addForm.date,
-        end_date: addForm.booking_type === 'car' && addForm.end_date ? addForm.end_date : null,
-        duration: addForm.duration,
-        notes: addForm.notes,
-        total_price: addForm.total_price,
-        status: addForm.status,
-        payment_status: 'unpaid',
-        payment_type: bookingPaymentType,
-        total_amount: totalAmountNum,
-        amount_paid: amountPaidNum,
-        remaining_balance: remainingBalanceNum,
-        ktp_url,
-        sim_url,
-        booking_details_snapshot: snapshot
-      }).select('id').single();
-      if (bookingErr) throw bookingErr;
+      const bookingResponse = await apiFetch('/bookings', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: addForm.name,
+          email: addForm.email,
+          phone: cleanPhone,
+          booking_type: addForm.booking_type === 'car' ? 'car_rental' : 'package',
+          item_id: addForm.booking_type === 'car' ? Number(selectedCarId) : Number(selectedPkgId),
+          item_name: addForm.item_name,
+          date: addForm.date,
+          duration: addForm.duration,
+          quantity: quantity,
+          notes: addForm.notes,
+          payment_type: bookingPaymentType,
+          nationality_type: addForm.nationality_type,
+          identity_type: addForm.identity_type,
+          identity_number: addForm.identity_number,
+        })
+      });
+
+      const newBookingId = bookingResponse?.data?.id;
+      if (!newBookingId) throw new Error('Failed to get booking ID from response');
 
       // Auto-trigger Midtrans Payment Link Generation
       try {
-        await fetch('/api/payment', {
+        await apiFetch('/payments/snap-token', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            booking_id: bookingData.id,
-            payment_type: bookingPaymentType,
+            booking_id: newBookingId,
           })
         });
       } catch (payErr) {

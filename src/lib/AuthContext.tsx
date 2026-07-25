@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
-import supabase from './supabase';
 import type { User, Session } from '@supabase/supabase-js';
+import { apiFetch } from './apiFetch';
 
 export type UserRole = 'user' | 'admin' | 'super_admin';
 
@@ -53,25 +53,6 @@ const AuthContext = createContext<AuthContextType>({
   isLoggedIn: false,
 });
 
-const fetchUserProfile = async (userId: string): Promise<UserProfile | null> => {
-  try {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single();
-    
-    if (error) {
-      console.warn('Could not fetch user profile:', error.message);
-      return null;
-    }
-    return data as UserProfile;
-  } catch (err) {
-    console.error('Unexpected error fetching user profile:', err);
-    return null;
-  }
-};
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
@@ -79,82 +60,177 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const refreshProfile = async () => {
-    if (user) {
-      const userProfile = await fetchUserProfile(user.id);
-      setProfile(userProfile);
-    } else {
+    const token = localStorage.getItem('laravel_token');
+    if (!token) {
+      setUser(null);
+      setSession(null);
+      setProfile(null);
+      return;
+    }
+
+    try {
+      const res = await apiFetch('/auth/me');
+      if (res && res.data) {
+        const laravelUser = {
+          id: String(res.data.id),
+          email: res.data.email,
+          user_metadata: { full_name: res.data.name },
+          app_metadata: {},
+          aud: 'authenticated',
+          created_at: res.data.created_at || new Date().toISOString(),
+        } as any as User;
+
+        setUser(laravelUser);
+        setSession({
+          access_token: token,
+          token_type: 'bearer',
+          user: laravelUser,
+        } as any as Session);
+
+        // Map backend customer relation if eager loaded, or fallback to user fields
+        const customer = res.data.customer || {};
+        setProfile({
+          id: String(res.data.id),
+          full_name: res.data.name,
+          email: res.data.email,
+          role: (res.data.role || 'user') as UserRole,
+          phone: customer.phone || '',
+          address: customer.address || '',
+          nationality_type: customer.nationality_type,
+          identity_type: customer.identity_type,
+          identity_number: customer.identity_number,
+          country_origin: customer.country_origin,
+          ktp_passport_url: customer.identity_photo_path,
+          identity_verification_status: customer.identity_verification_status || 'UNVERIFIED',
+        });
+      } else {
+        throw new Error('Failed to fetch user data');
+      }
+    } catch (err) {
+      console.error('Error refreshing profile:', err);
+      // Clear token if invalid/expired
+      localStorage.removeItem('laravel_token');
+      setUser(null);
+      setSession(null);
       setProfile(null);
     }
   };
 
   useEffect(() => {
-    let isMounted = true;
-
     const initAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!isMounted) return;
-      
-      setSession(session);
-      const currentUser = session?.user ?? null;
-      setUser(currentUser);
-      
-      if (currentUser) {
-        const userProfile = await fetchUserProfile(currentUser.id);
-        if (isMounted) {
-          setProfile(userProfile);
-        }
-      } else {
-        if (isMounted) setProfile(null);
+      const token = localStorage.getItem('laravel_token');
+      if (token) {
+        await refreshProfile();
       }
-      if (isMounted) setLoading(false);
+      setLoading(false);
     };
 
     initAuth();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (!isMounted) return;
-
-      setSession(session);
-      const currentUser = session?.user ?? null;
-      setUser(currentUser);
-      
-      if (currentUser) {
-        const userProfile = await fetchUserProfile(currentUser.id);
-        if (isMounted) {
-          setProfile(userProfile);
-        }
-      } else {
-        if (isMounted) setProfile(null);
-      }
-      if (isMounted) setLoading(false);
-    });
-
-    return () => {
-      isMounted = false;
-      subscription.unsubscribe();
-    };
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return { error: error as Error | null };
+    try {
+      const res = await apiFetch('/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email, password })
+      });
+
+      if (res && res.token) {
+        localStorage.setItem('laravel_token', res.token);
+        
+        const laravelUser = {
+          id: String(res.user.id),
+          email: res.user.email,
+          user_metadata: { full_name: res.user.name },
+          app_metadata: {},
+          aud: 'authenticated',
+          created_at: new Date().toISOString(),
+        } as any as User;
+
+        setUser(laravelUser);
+        setSession({
+          access_token: res.token,
+          token_type: 'bearer',
+          user: laravelUser,
+        } as any as Session);
+
+        setProfile({
+          id: String(res.user.id),
+          full_name: res.user.name,
+          email: res.user.email,
+          role: (res.user.role || 'user') as UserRole,
+        });
+
+        // Trigger loading complete profile details
+        await refreshProfile();
+        return { error: null };
+      }
+      return { error: new Error('Gagal login: Token tidak ditemukan.') };
+    } catch (err: any) {
+      console.error('Sign in failed:', err);
+      return { error: err as Error };
+    }
   };
 
   const signUp = async (email: string, password: string, fullName: string) => {
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          full_name: fullName,
-        },
-      },
-    });
-    return { error: error as Error | null };
+    try {
+      const res = await apiFetch('/auth/register', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: fullName,
+          email,
+          password,
+          password_confirmation: password
+        })
+      });
+
+      if (res && res.token) {
+        localStorage.setItem('laravel_token', res.token);
+        
+        const laravelUser = {
+          id: String(res.user.id),
+          email: res.user.email,
+          user_metadata: { full_name: res.user.name },
+          app_metadata: {},
+          aud: 'authenticated',
+          created_at: new Date().toISOString(),
+        } as any as User;
+
+        setUser(laravelUser);
+        setSession({
+          access_token: res.token,
+          token_type: 'bearer',
+          user: laravelUser,
+        } as any as Session);
+
+        setProfile({
+          id: String(res.user.id),
+          full_name: res.user.name,
+          email: res.user.email,
+          role: (res.user.role || 'user') as UserRole,
+        });
+
+        await refreshProfile();
+        return { error: null };
+      }
+      return { error: new Error('Gagal registrasi: Token tidak ditemukan.') };
+    } catch (err: any) {
+      console.error('Sign up failed:', err);
+      return { error: err as Error };
+    }
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    try {
+      await apiFetch('/auth/logout', { method: 'POST' });
+    } catch (err) {
+      console.warn('Logout request failed (token may have already expired):', err);
+    } finally {
+      localStorage.removeItem('laravel_token');
+      setUser(null);
+      setSession(null);
+      setProfile(null);
+    }
   };
 
   const role = profile?.role ?? null;

@@ -6,7 +6,8 @@ import {
   Download, Filter, FileText
 } from 'lucide-react';
 import { useI18n } from '../../lib/I18nContext';
-import supabase from '../../lib/supabase';
+import supabase from '../../lib/supabase'; // Masih digunakan untuk storage signed URL
+import { apiFetch } from '../../lib/apiFetch';
 
 interface Customer {
   id: number;
@@ -136,9 +137,8 @@ export default function CustomerDatabase() {
   const loadCustomers = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase.from('customers').select('*').order('created_at', { ascending: false });
-      if (error) throw error;
-      if (data) setCustomers(data);
+      const res = await apiFetch<{ data: any[] }>('/customers');
+      if (res.data) setCustomers(res.data);
     } catch (err) {
       console.error(err);
     } finally {
@@ -244,11 +244,15 @@ export default function CustomerDatabase() {
 
     try {
       if (editing) {
-        const { error } = await supabase.from('customers').update(data).eq('id', editing.id);
-        if (error) throw error;
+        await apiFetch(`/customers/${editing.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify(data),
+        });
       } else {
-        const { error } = await supabase.from('customers').insert(data);
-        if (error) throw error;
+        await apiFetch('/customers', {
+          method: 'POST',
+          body: JSON.stringify(data),
+        });
       }
       showToast('success', t('customerSaved'));
       setShowModal(false);
@@ -261,8 +265,7 @@ export default function CustomerDatabase() {
 
   const deleteCustomer = async (id: number) => {
     try {
-      const { error } = await supabase.from('customers').delete().eq('id', id);
-      if (error) throw error;
+      await apiFetch(`/customers/${id}`, { method: 'DELETE' });
       showToast('success', t('customerDeleted'));
       loadCustomers();
     } catch (err) {

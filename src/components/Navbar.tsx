@@ -4,7 +4,7 @@ import { Menu, X, Palmtree, ShieldCheck, User, LogOut, LogIn, ChevronDown, Globe
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../lib/AuthContext';
 import { useI18n } from '../lib/I18nContext';
-import supabase from '../lib/supabase';
+import { apiFetch } from '../lib/apiFetch';
 
 export default function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
@@ -77,30 +77,18 @@ export default function Navbar() {
     setModalSuccess('');
 
     try {
-      // 1. Update public.profiles table in Supabase
-      const { error: profileErr } = await supabase
-        .from('profiles')
-        .update({
+      // Update profile via Laravel API
+      await apiFetch('/auth/me', {
+        method: 'PATCH',
+        body: JSON.stringify({
           full_name: fullName,
           phone: phone,
           address: address,
           birth_date: birthDate || null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', user.id);
-
-      if (profileErr) throw profileErr;
-
-      // 2. Update auth.users metadata so displayName reflects changes instantly
-      const { error: authErr } = await supabase.auth.updateUser({
-        data: { full_name: fullName }
+        }),
       });
 
-      if (authErr) {
-        console.warn('Metadata update failed, profile updated successfully:', authErr.message);
-      }
-
-      // 3. Refresh profile state in AuthContext
+      // Refresh profile state in AuthContext
       await refreshProfile();
 
       setModalSuccess(locale === 'id' ? 'Profil berhasil diperbarui!' : 'Profile updated successfully!');
