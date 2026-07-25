@@ -9,7 +9,7 @@ export default defineConfig(async ({ mode }) => {
     // @ts-ignore
     const m = await import('./.vite-source-tags.js');
     plugins.push(m.sourceTags());
-  } catch {}
+  } catch { }
 
   const env = loadEnv(mode, process.cwd(), ['VITE_', 'NEXT_PUBLIC_']);
   const processEnvDefines: Record<string, string> = {};
@@ -26,10 +26,12 @@ export default defineConfig(async ({ mode }) => {
         // Proxy /api/* to Vercel dev server during local development
         // Run: vercel dev (in a separate terminal) → starts on port 3000
         '/api': {
-          target: 'http://localhost:3000',
+          target: 'https://travel-backend-production-65db.up.railway.app/',
           changeOrigin: true,
         },
       },
     },
   };
 })
+
+
