@@ -258,6 +258,9 @@ export default function Home() {
     }
   };
 
+  const todayStr = new Date().toLocaleDateString('sv-SE');
+  const isToday = bookingForm.date === todayStr;
+
   // Computed: final price
   const computedPrice = useMemo(() => {
     if (bookingForm.booking_type === 'package' && selectedHotel && selectedPaxKey) {
@@ -292,6 +295,14 @@ export default function Home() {
       }));
     }
   }, [bookingForm.booking_type, selectedPkg, selectedHotel, selectedPaxKey, selectedCar, computedPrice, isPaxPricing, bookingForm.date, bookingForm.end_date]);
+
+  // Reset payment_type to FULL if date is today and payment_type is DP
+  useEffect(() => {
+    const todayStr = new Date().toLocaleDateString('sv-SE');
+    if (bookingForm.date === todayStr && bookingForm.payment_type === 'DP') {
+      setBookingForm(prev => ({ ...prev, payment_type: 'FULL' }));
+    }
+  }, [bookingForm.date, bookingForm.payment_type]);
 
   // Reset sub-selections when booking type changes
   const handleBookingTypeChange = (type: string) => {
@@ -1463,7 +1474,7 @@ export default function Home() {
                     <label className="block text-sm font-medium text-ocean-800 mb-2">
                       {locale === 'id' ? 'Metode Pembayaran' : 'Payment Method'}
                     </label>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className={`grid ${isToday ? 'grid-cols-1' : 'grid-cols-2'} gap-3`}>
                       <button
                         type="button"
                         onClick={() => setBookingForm(p => ({ ...p, payment_type: 'FULL' }))}
@@ -1472,14 +1483,16 @@ export default function Home() {
                         <span className="font-bold text-sm text-ocean-900">{locale === 'id' ? 'Bayar Lunas (Full)' : 'Full Payment'}</span>
                         <span className="text-xs text-slate-500 mt-1">{locale === 'id' ? 'Bayar lunas total biaya' : 'Pay total amount now'}</span>
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => setBookingForm(p => ({ ...p, payment_type: 'DP' }))}
-                        className={`flex flex-col p-4 rounded-xl border-2 text-left transition-all ${bookingForm.payment_type === 'DP' ? 'border-toska-500 bg-toska-50/50' : 'border-slate-200 hover:border-slate-300'}`}
-                      >
-                        <span className="font-bold text-sm text-ocean-900">{locale === 'id' ? 'DP 50% (Uang Muka)' : 'Down Payment 50%'}</span>
-                        <span className="text-xs text-slate-500 mt-1">{locale === 'id' ? 'Bayar 50%, pelunasan H-1' : 'Pay 50% now, rest H-1'}</span>
-                      </button>
+                      {!isToday && (
+                        <button
+                          type="button"
+                          onClick={() => setBookingForm(p => ({ ...p, payment_type: 'DP' }))}
+                          className={`flex flex-col p-4 rounded-xl border-2 text-left transition-all ${bookingForm.payment_type === 'DP' ? 'border-toska-500 bg-toska-50/50' : 'border-slate-200 hover:border-slate-300'}`}
+                        >
+                          <span className="font-bold text-sm text-ocean-900">{locale === 'id' ? 'DP 50% (Uang Muka)' : 'Down Payment 50%'}</span>
+                          <span className="text-xs text-slate-500 mt-1">{locale === 'id' ? 'Bayar 50%, pelunasan H-1' : 'Pay 50% now, rest H-1'}</span>
+                        </button>
+                      )}
                     </div>
                   </div>
 

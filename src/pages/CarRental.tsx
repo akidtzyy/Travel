@@ -127,6 +127,9 @@ export default function CarRentalPage() {
     }
   };
 
+  const todayStr = new Date().toLocaleDateString('sv-SE');
+  const isToday = bookingForm.date === todayStr;
+
   // Auto-fill form when car is selected or dates change
   useEffect(() => {
     if (selectedCar) {
@@ -155,6 +158,14 @@ export default function CarRentalPage() {
       }));
     }
   }, [user, profile, isLoggedIn]);
+
+  // Reset payment_type to FULL if date is today and payment_type is DP
+  useEffect(() => {
+    const todayStr = new Date().toLocaleDateString('sv-SE');
+    if (bookingForm.date === todayStr && bookingForm.payment_type === 'DP') {
+      setBookingForm(prev => ({ ...prev, payment_type: 'FULL' }));
+    }
+  }, [bookingForm.date, bookingForm.payment_type]);
 
   const applyWatermark = (file: File): Promise<Blob> => {
     return new Promise((resolve) => {
@@ -891,7 +902,7 @@ export default function CarRentalPage() {
                   <label className="block text-sm font-medium text-ocean-800 mb-2">
                     {locale === 'id' ? 'Metode Pembayaran' : 'Payment Method'}
                   </label>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className={`grid ${isToday ? 'grid-cols-1' : 'grid-cols-2'} gap-3`}>
                     <button
                       type="button"
                       onClick={() => setBookingForm(p => ({ ...p, payment_type: 'FULL' }))}
@@ -900,14 +911,16 @@ export default function CarRentalPage() {
                       <span className="font-bold text-sm text-ocean-900">{locale === 'id' ? 'Bayar Lunas (Full)' : 'Full Payment'}</span>
                       <span className="text-xs text-slate-500 mt-1">{locale === 'id' ? 'Bayar lunas total biaya' : 'Pay total amount now'}</span>
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => setBookingForm(p => ({ ...p, payment_type: 'DP' }))}
-                      className={`flex flex-col p-4 rounded-xl border-2 text-left transition-all ${bookingForm.payment_type === 'DP' ? 'border-toska-500 bg-toska-50/50' : 'border-slate-200 hover:border-slate-300'}`}
-                    >
-                      <span className="font-bold text-sm text-ocean-900">{locale === 'id' ? 'DP 50% (Uang Muka)' : 'Down Payment 50%'}</span>
-                      <span className="text-xs text-slate-500 mt-1">{locale === 'id' ? 'Bayar 50%, pelunasan H-1' : 'Pay 50% now, rest H-1'}</span>
-                    </button>
+                    {!isToday && (
+                      <button
+                        type="button"
+                        onClick={() => setBookingForm(p => ({ ...p, payment_type: 'DP' }))}
+                        className={`flex flex-col p-4 rounded-xl border-2 text-left transition-all ${bookingForm.payment_type === 'DP' ? 'border-toska-500 bg-toska-50/50' : 'border-slate-200 hover:border-slate-300'}`}
+                      >
+                        <span className="font-bold text-sm text-ocean-900">{locale === 'id' ? 'DP 50% (Uang Muka)' : 'Down Payment 50%'}</span>
+                        <span className="text-xs text-slate-500 mt-1">{locale === 'id' ? 'Bayar 50%, pelunasan H-1' : 'Pay 50% now, rest H-1'}</span>
+                      </button>
+                    )}
                   </div>
                 </div>
 
