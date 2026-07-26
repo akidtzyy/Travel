@@ -388,6 +388,18 @@ export default function Home() {
     setBookingLoading(true);
 
     try {
+      // 0. Pre-flight validation — catch empty required fields before API call
+      if (!bookingForm.name || bookingForm.name.trim().length < 3) {
+        alert(locale === 'id' ? 'Nama lengkap wajib diisi (minimal 3 karakter).' : 'Full name is required (minimum 3 characters).');
+        setBookingLoading(false);
+        return;
+      }
+      if (!bookingForm.phone || bookingForm.phone.trim().length < 8) {
+        alert(locale === 'id' ? 'Nomor WhatsApp wajib diisi.' : 'WhatsApp number is required.');
+        setBookingLoading(false);
+        return;
+      }
+
       // 1. Validation for document uploads
       const isVerified = profile?.identity_verification_status === 'VERIFIED';
       if (!isVerified) {
@@ -1056,9 +1068,8 @@ export default function Home() {
                       type="text"
                       required
                       value={bookingForm.name}
-                      readOnly={!!profile?.full_name || !!user?.user_metadata?.full_name}
                       onChange={e => setBookingForm(p => ({ ...p, name: e.target.value }))}
-                      className={`w-full px-4 py-3 rounded-xl border border-ocean-200 focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm ${(profile?.full_name || user?.user_metadata?.full_name) ? 'bg-ocean-100 text-ocean-600 cursor-not-allowed' : 'bg-white'}`}
+                      className="w-full px-4 py-3 rounded-xl border border-ocean-200 focus:ring-2 focus:ring-toska-500 focus:border-toska-500 outline-none transition-all text-sm bg-white"
                       placeholder={locale === 'id' ? 'Nama Anda' : 'Your Name'}
                     />
                   </div>
