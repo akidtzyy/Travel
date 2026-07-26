@@ -529,8 +529,6 @@ export default function BookingManagement() {
         setSelectedBooking(prev => prev ? { ...prev, status: value as any } : null);
       }
 
-      // Only update booking status (admin doc approval)
-      // DO NOT touch payment_status — that is managed by Midtrans webhook
       await apiFetch(`/bookings/${id}`, {
         method: 'PUT',
         body: JSON.stringify({ status: value })
@@ -539,6 +537,27 @@ export default function BookingManagement() {
       showToast('success', t('bookingSaved'));
     } catch (err: any) {
       console.error('Error updating status:', err);
+      showToast('error', err?.message || t('errorOccurred'));
+      loadBookings(); // Rollback
+    }
+  };
+
+  const updatePaymentStatus = async (id: number, value: string) => {
+    try {
+      // Optimistic UI update
+      setBookings(prev => prev.map(b => b.id === id ? { ...b, payment_status: value as any } : b));
+      if (selectedBooking && selectedBooking.id === id) {
+        setSelectedBooking(prev => prev ? { ...prev, payment_status: value as any } : null);
+      }
+
+      await apiFetch(`/bookings/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ payment_status: value })
+      });
+
+      showToast('success', locale === 'id' ? 'Status pembayaran diperbarui.' : 'Payment status updated.');
+    } catch (err: any) {
+      console.error('Error updating payment status:', err);
       showToast('error', err?.message || t('errorOccurred'));
       loadBookings(); // Rollback
     }
@@ -1587,7 +1606,7 @@ export default function BookingManagement() {
                     {locale === 'id' ? 'Perbarui Status' : 'Update Status'}
                   </h4>
 
-                  <div>
+                  <div className="space-y-3">
                     {/* Booking Status Dropdown */}
                     <div>
                       <label className="text-xs font-medium text-slate-500 block mb-1.5">{t('status')}</label>
@@ -1599,9 +1618,30 @@ export default function BookingManagement() {
                         >
                           <option value="pending">{t('pending')}</option>
                           <option value="confirmed">{t('confirmed')}</option>
-                          <option value="paid">{t('paid')}</option>
                           <option value="completed">{t('completed')}</option>
                           <option value="cancelled">{t('cancelled')}</option>
+                          <option value="rescheduled">{locale === 'id' ? 'Dijadwal Ulang' : 'Rescheduled'}</option>
+                          <option value="expired">{locale === 'id' ? 'Kedaluwarsa' : 'Expired'}</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Payment Status Dropdown */}
+                    <div>
+                      <label className="text-xs font-medium text-slate-500 block mb-1.5">{t('paymentStatus')}</label>
+                      <div className="relative">
+                        <select
+                          value={selectedBooking.payment_status || 'unpaid'}
+                          onChange={(e) => updatePaymentStatus(selectedBooking.id, e.target.value)}
+                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-toska-500 text-sm text-slate-700 bg-white"
+                        >
+                          <option value="unpaid">{locale === 'id' ? 'Belum Bayar' : 'Unpaid'}</option>
+                          <option value="pending">{locale === 'id' ? 'Menunggu' : 'Pending'}</option>
+                          <option value="paid">{locale === 'id' ? 'Lunas' : 'Paid'}</option>
+                          <option value="partially_paid">{locale === 'id' ? 'DP Dibayar' : 'Partially Paid'}</option>
+                          <option value="failed">{locale === 'id' ? 'Gagal' : 'Failed'}</option>
+                          <option value="expired">{locale === 'id' ? 'Kedaluwarsa' : 'Expired'}</option>
+                          <option value="challenge">{locale === 'id' ? 'Ditinjau' : 'Challenge'}</option>
                         </select>
                       </div>
                     </div>
