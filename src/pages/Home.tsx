@@ -528,7 +528,6 @@ export default function Home() {
           method: 'PUT',
           body: JSON.stringify({
             payment_status: status,
-            status: status === 'paid' ? 'confirmed' : 'pending',
           }),
         });
       } catch (e) {
