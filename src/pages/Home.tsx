@@ -484,6 +484,18 @@ export default function Home() {
         }
       }
 
+      console.log('Sending booking data:', {
+        name: bookingForm.name,
+        email: bookingForm.email,
+        phone: bookingForm.phone,
+        booking_type: backendBookingType,
+        date: bookingForm.date,
+        duration: bookingForm.duration,
+        nationality_type: bookingForm.nationality_type,
+        identity_type: bookingForm.identity_type,
+        identity_number: bookingForm.identity_number,
+      });
+
       // 4. Send booking to Laravel API
       const token = localStorage.getItem('laravel_token');
       const headers: Record<string, string> = { Accept: 'application/json' };
