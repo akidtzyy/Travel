@@ -100,7 +100,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           identity_type: customer.identity_type,
           identity_number: customer.identity_number,
           country_origin: customer.country_origin,
-          ktp_passport_url: customer.identity_photo_path,
+          // Use the accessor-resolved full Cloudinary URLs (not raw path fields)
+          ktp_passport_url: customer.ktp_passport_url || undefined,
+          sim_idp_url: customer.sim_idp_url || undefined,
           identity_verification_status: customer.identity_verification_status || 'UNVERIFIED',
         });
       } else {

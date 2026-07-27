@@ -756,10 +756,22 @@ export default function CarRentalPage() {
                         </span>
                         {profile?.ktp_passport_url && (
                           <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-bold">
-                            Sudah ada di profil
+                            ✓ Sudah ada di profil
                           </span>
                         )}
                       </label>
+                      {/* Preview existing saved KTP photo */}
+                      {profile?.ktp_passport_url && !ktpPassportPreview && (
+                        <div className="mb-2">
+                          <p className="text-[10px] text-ocean-500 mb-1">Foto tersimpan (kosongkan untuk tetap pakai ini):</p>
+                          <img
+                            src={profile.ktp_passport_url}
+                            alt="KTP/Paspor tersimpan"
+                            className="w-32 h-20 object-cover rounded-xl border-2 border-emerald-300"
+                            onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                          />
+                        </div>
+                      )}
                       <input
                         type="file"
                         required={!profile?.ktp_passport_url}
@@ -788,10 +800,22 @@ export default function CarRentalPage() {
                         </span>
                         {profile?.sim_idp_url && (
                           <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-bold">
-                            Sudah ada di profil
+                            ✓ Sudah ada di profil
                           </span>
                         )}
                       </label>
+                      {/* Preview existing saved SIM photo */}
+                      {profile?.sim_idp_url && !simIdpPreview && (
+                        <div className="mb-2">
+                          <p className="text-[10px] text-ocean-500 mb-1">Foto tersimpan (kosongkan untuk tetap pakai ini):</p>
+                          <img
+                            src={profile.sim_idp_url}
+                            alt="SIM/IDP tersimpan"
+                            className="w-32 h-20 object-cover rounded-xl border-2 border-emerald-300"
+                            onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                          />
+                        </div>
+                      )}
                       <input
                         type="file"
                         required={!profile?.sim_idp_url}
