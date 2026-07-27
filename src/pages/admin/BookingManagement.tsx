@@ -424,6 +424,14 @@ export default function BookingManagement() {
     loadInitialData();
   }, []);
 
+  // Auto-poll every 20 seconds to pick up payment status changes from Midtrans webhook
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadBookings(true, true); // silent refresh, skip auto-complete check
+    }, 20000);
+    return () => clearInterval(interval);
+  }, []);
+
   const checkAndAutoCompleteBookings = async (activeBookings: Booking[]) => {
     const todayStr = new Date().toISOString().split('T')[0]; // yyyy-mm-dd
     const toComplete: number[] = [];
@@ -485,8 +493,8 @@ export default function BookingManagement() {
     }
   };
 
-  const loadBookings = async (skipAutoCheck = false) => {
-    setLoading(true);
+  const loadBookings = async (skipAutoCheck = false, silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const res = await apiFetch<{ data: any[] }>('/bookings');
       if (res && res.data) {
@@ -510,9 +518,9 @@ export default function BookingManagement() {
       }
     } catch (err) {
       console.error('Error loading bookings:', err);
-      showToast('error', t('errorOccurred'));
+      if (!silent) showToast('error', t('errorOccurred'));
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 

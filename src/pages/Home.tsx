@@ -545,20 +545,6 @@ export default function Home() {
     if (!pendingBookingId) return;
     setPaymentStep('processing');
 
-    // Helper: update booking status directly from frontend (reliable fallback)
-    const updateBookingStatus = async (status: string) => {
-      try {
-        await apiFetch(`/bookings/${pendingBookingId}`, {
-          method: 'PUT',
-          body: JSON.stringify({
-            payment_status: status,
-          }),
-        });
-      } catch (e) {
-        console.warn('Could not update booking status:', e);
-      }
-    };
-
     try {
       // Get snap token from Laravel backend API
       const responseData = await apiFetch('/payments/snap-token', {
@@ -574,21 +560,35 @@ export default function Home() {
         throw new Error('Gagal mendapatkan token pembayaran');
       }
 
+      // Helper: verify payment status directly from Midtrans and sync to DB
+      // Uses /payments/verify-status which is accessible to authenticated users
+      const syncPaymentStatus = async () => {
+        if (!order_id) return;
+        try {
+          await apiFetch('/payments/verify-status', {
+            method: 'POST',
+            body: JSON.stringify({ order_id }),
+          });
+        } catch (e) {
+          console.warn('Could not sync payment status:', e);
+        }
+      };
+
       // Open Midtrans Snap popup
       await openSnapPayment(snap_token, {
         onSuccess: async () => {
-          // Update DB directly — don't rely solely on webhook
-          await updateBookingStatus('paid');
+          // Verify & sync payment status from Midtrans → DB
+          await syncPaymentStatus();
           setPaymentStep('success');
           resetBookingForm();
         },
         onPending: async () => {
-          await updateBookingStatus('pending');
+          await syncPaymentStatus();
           setPaymentStep('pending');
           resetBookingForm();
         },
         onError: async () => {
-          await updateBookingStatus('failed');
+          await syncPaymentStatus();
           setPaymentStep('failed');
         },
         onClose: () => {
