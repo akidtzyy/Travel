@@ -160,51 +160,15 @@ export default function BookingManagement() {
   const [selectedBookingKtpSignedUrl, setSelectedBookingKtpSignedUrl] = useState<string | null>(null);
   const [selectedBookingSimSignedUrl, setSelectedBookingSimSignedUrl] = useState<string | null>(null);
 
-  const getSignedUrl = async (pathOrUrl: string | null): Promise<string> => {
-    if (!pathOrUrl) return '';
-    if (pathOrUrl.startsWith('blob:')) return pathOrUrl;
-    
-    let path = pathOrUrl;
-    const marker = '/object/public/booking-documents/';
-    const idx = pathOrUrl.indexOf(marker);
-    if (idx !== -1) {
-      path = pathOrUrl.substring(idx + marker.length);
-    }
-    
-    try {
-      const { data, error } = await supabase.storage
-        .from('booking-documents')
-        .createSignedUrl(path, 60);
-      if (error) throw error;
-      return data.signedUrl;
-    } catch (err) {
-      console.error('Error generating signed URL:', err);
-      return pathOrUrl;
-    }
-  };
-
+  // For Cloudinary URLs, no signing needed — they are direct public https:// links
   useEffect(() => {
-    const resolveUrls = async () => {
-      if (selectedBooking) {
-        if (selectedBooking.ktp_url) {
-          const signed = await getSignedUrl(selectedBooking.ktp_url);
-          setSelectedBookingKtpSignedUrl(signed);
-        } else {
-          setSelectedBookingKtpSignedUrl(null);
-        }
-        
-        if (selectedBooking.sim_url) {
-          const signed = await getSignedUrl(selectedBooking.sim_url);
-          setSelectedBookingSimSignedUrl(signed);
-        } else {
-          setSelectedBookingSimSignedUrl(null);
-        }
-      } else {
-        setSelectedBookingKtpSignedUrl(null);
-        setSelectedBookingSimSignedUrl(null);
-      }
-    };
-    resolveUrls();
+    if (selectedBooking) {
+      setSelectedBookingKtpSignedUrl(selectedBooking.ktp_url || null);
+      setSelectedBookingSimSignedUrl(selectedBooking.sim_url || null);
+    } else {
+      setSelectedBookingKtpSignedUrl(null);
+      setSelectedBookingSimSignedUrl(null);
+    }
   }, [selectedBooking]);
 
   const applyWatermark = (file: File): Promise<Blob> => {
