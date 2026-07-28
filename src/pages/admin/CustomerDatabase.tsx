@@ -99,9 +99,7 @@ export default function CustomerDatabase() {
         });
       }
 
-      if (docs.length === 0) {
-        docs.push({ label: 'Tidak ada dokumen tersimpan', url: '', booking_info: '' });
-      }
+
 
       setSelectedCustDocs(docs);
     } catch (err) {
