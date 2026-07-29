@@ -9,7 +9,7 @@
  *   const data = await apiFetch('/bookings', { method: 'POST', body: JSON.stringify({...}) }, token);
  */
 
-const BASE = '/api/v1';
+const BASE = import.meta.env.VITE_API_URL || '/api/v1';
 
 export async function apiFetch<T = any>(
   path: string,
