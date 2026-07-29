@@ -113,6 +113,17 @@ export default function Navbar() {
   }, []);
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('show_bookings') === 'true') {
+      setShowMyBookingsModal(true);
+      loadMyBookings();
+      // Remove query parameter from URL cleanly without page refresh
+      const newUrl = window.location.pathname + window.location.hash;
+      window.history.replaceState({}, document.title, newUrl);
+    }
+  }, [location]);
+
+  useEffect(() => {
     setIsOpen(false);
     setUserMenuOpen(false);
     setMobileAboutOpen(false);
