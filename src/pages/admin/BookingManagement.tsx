@@ -159,6 +159,7 @@ export default function BookingManagement() {
   // Temporary Signed URL states for detail modal
   const [selectedBookingKtpSignedUrl, setSelectedBookingKtpSignedUrl] = useState<string | null>(null);
   const [selectedBookingSimSignedUrl, setSelectedBookingSimSignedUrl] = useState<string | null>(null);
+  const [generatingPelunasan, setGeneratingPelunasan] = useState(false);
 
   // For Cloudinary URLs, no signing needed — they are direct public https:// links
   useEffect(() => {
@@ -574,6 +575,28 @@ export default function BookingManagement() {
       showToast('error', err?.message || t('errorOccurred'));
     }
     setDeleteConfirm(null);
+  };
+
+  const generatePelunasanLink = async (booking: Booking) => {
+    setGeneratingPelunasan(true);
+    try {
+      const data = await apiFetch('/payments/snap-token', {
+        method: 'POST',
+        body: JSON.stringify({ booking_id: booking.id, is_final_payment: true }),
+      });
+      const paymentUrl = data?.data?.payment_url;
+      if (paymentUrl) {
+        window.open(paymentUrl, '_blank');
+        showToast('success', locale === 'id' ? 'Link pelunasan berhasil dibuat!' : 'Final payment link generated!');
+      } else {
+        showToast('error', locale === 'id' ? 'Gagal mendapatkan link pembayaran.' : 'Failed to get payment link.');
+      }
+    } catch (err: any) {
+      console.error('Error generating pelunasan link:', err);
+      showToast('error', err?.message || t('errorOccurred'));
+    } finally {
+      setGeneratingPelunasan(false);
+    }
   };
 
 
@@ -1474,6 +1497,25 @@ export default function BookingManagement() {
                             Rp {(selectedBooking.remaining_balance ?? 0).toLocaleString('id-ID')}
                           </span>
                         </div>
+                        {/* Tombol Buat Link Pelunasan */}
+                        {(selectedBooking.remaining_balance ?? 0) > 0 && selectedBooking.payment_status !== 'paid' && (
+                          <div className="pt-2">
+                            <button
+                              onClick={() => generatePelunasanLink(selectedBooking)}
+                              disabled={generatingPelunasan}
+                              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:bg-amber-300 text-white rounded-xl text-xs font-bold transition-all"
+                            >
+                              {generatingPelunasan ? (
+                                <><div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" /> {locale === 'id' ? 'Membuat link...' : 'Generating...'}</>
+                              ) : (
+                                <>{locale === 'id' ? '💳 Buat Link Pelunasan' : '💳 Generate Final Payment Link'}</>
+                              )}
+                            </button>
+                            <p className="text-[10px] text-slate-400 text-center mt-1">
+                              {locale === 'id' ? 'Link akan dibuka di tab baru untuk dibagikan ke pelanggan' : 'Link opens in new tab to share with customer'}
+                            </p>
+                          </div>
+                        )}
                       </>
                     )}
                   </div>
