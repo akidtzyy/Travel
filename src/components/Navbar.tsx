@@ -82,17 +82,47 @@ export default function Navbar() {
       });
       const paymentUrl = res.data?.payment_url;
       if (paymentUrl) {
+        // Open Midtrans payment in new tab
         window.open(paymentUrl, '_blank');
-        loadMyBookings();
+        
+        // Start polling verify-and-sync every 5 seconds for up to 3 minutes
+        let attempts = 0;
+        const maxAttempts = 36; // 36 x 5s = 3 minutes
+        const pollInterval = setInterval(async () => {
+          attempts++;
+          try {
+            const syncRes = await apiFetch<any>('/payments/verify-and-sync', {
+              method: 'POST',
+              body: JSON.stringify({ booking_id: bookingId }),
+            });
+            const newStatus = syncRes.payment_status;
+            if (newStatus === 'paid') {
+              clearInterval(pollInterval);
+              setGeneratingPelunasanForId(null);
+              await loadMyBookings();
+            } else if (attempts >= maxAttempts) {
+              clearInterval(pollInterval);
+              setGeneratingPelunasanForId(null);
+              await loadMyBookings();
+            }
+          } catch {
+            // Silently ignore polling errors
+            if (attempts >= maxAttempts) {
+              clearInterval(pollInterval);
+              setGeneratingPelunasanForId(null);
+            }
+          }
+        }, 5000);
+
+        return; // Don't clear generatingPelunasanForId yet — polling will do it
       } else {
         alert(locale === 'id' ? 'Gagal membuat link pelunasan.' : 'Failed to generate final payment link.');
       }
     } catch (err: any) {
       console.error('Error generating pelunasan link:', err);
       alert(err?.message || (locale === 'id' ? 'Terjadi kesalahan.' : 'An error occurred.'));
-    } finally {
-      setGeneratingPelunasanForId(null);
     }
+    setGeneratingPelunasanForId(null);
   };
 
   const handlePrintInvoice = () => {
@@ -893,12 +923,16 @@ export default function Navbar() {
                               <button
                                 onClick={() => payPelunasan(booking.id)}
                                 disabled={generatingPelunasanForId === booking.id}
-                                className="px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:bg-amber-300 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-amber-500/10"
+                                className="px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:bg-amber-300 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-amber-500/10 min-w-[150px]"
                               >
                                 {generatingPelunasanForId === booking.id ? (
-                                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin inline-block mr-1" />
-                                ) : '💳 '}
-                                {locale === 'id' ? 'Bayar Pelunasan' : 'Pay Balance'}
+                                  <span className="flex items-center gap-1.5 justify-center">
+                                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                    {locale === 'id' ? 'Menunggu Konfirmasi...' : 'Checking Payment...'}
+                                  </span>
+                                ) : (
+                                  <span>💳 {locale === 'id' ? 'Bayar Pelunasan' : 'Pay Balance'}</span>
+                                )}
                               </button>
                             )}
 
