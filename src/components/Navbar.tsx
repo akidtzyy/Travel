@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Menu, X, Palmtree, ShieldCheck, User, LogOut, LogIn, ChevronDown, Globe, MapPin, Phone, Calendar, Check } from 'lucide-react';
+import { Menu, X, Palmtree, ShieldCheck, User, LogOut, LogIn, ChevronDown, Globe, MapPin, Phone, Calendar, Check, Printer, ExternalLink, FileText, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../lib/AuthContext';
 import { useI18n } from '../lib/I18nContext';
@@ -21,6 +21,83 @@ export default function Navbar() {
   const [updating, setUpdating] = useState(false);
   const [modalError, setModalError] = useState('');
   const [modalSuccess, setModalSuccess] = useState('');
+
+  // My Bookings & Midtrans Invoice states
+  const [showMyBookingsModal, setShowMyBookingsModal] = useState(false);
+  const [myBookings, setMyBookings] = useState<any[]>([]);
+  const [myBookingsLoading, setMyBookingsLoading] = useState(false);
+  const [myBookingsError, setMyBookingsError] = useState('');
+  
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+  const [invoiceLoading, setInvoiceLoading] = useState(false);
+  const [invoiceData, setInvoiceData] = useState<any>(null);
+  const [selectedBookingForInvoice, setSelectedBookingForInvoice] = useState<any>(null);
+  const [generatingPelunasanForId, setGeneratingPelunasanForId] = useState<number | null>(null);
+
+  const loadMyBookings = async () => {
+    setMyBookingsLoading(true);
+    setMyBookingsError('');
+    try {
+      const res = await apiFetch<any>('/my-bookings');
+      setMyBookings(res.data || []);
+    } catch (err: any) {
+      console.error('Failed to load my bookings:', err);
+      setMyBookingsError(err?.message || (locale === 'id' ? 'Gagal memuat pesanan.' : 'Failed to load bookings.'));
+    } finally {
+      setMyBookingsLoading(false);
+    }
+  };
+
+  const loadInvoiceFromMidtrans = async (booking: any) => {
+    if (!booking.order_id) {
+      alert(locale === 'id' ? 'ID Transaksi belum tersedia untuk pesanan ini.' : 'Transaction ID not available for this booking.');
+      return;
+    }
+    setSelectedBookingForInvoice(booking);
+    setShowInvoiceModal(true);
+    setInvoiceLoading(true);
+    setInvoiceData(null);
+    try {
+      const res = await apiFetch<any>('/payments/verify-status', {
+        method: 'POST',
+        body: JSON.stringify({ order_id: booking.order_id }),
+      });
+      setInvoiceData(res.data || null);
+    } catch (err: any) {
+      console.error('Failed to fetch invoice from Midtrans:', err);
+    } finally {
+      setInvoiceLoading(false);
+    }
+  };
+
+  const payPelunasan = async (bookingId: number) => {
+    setGeneratingPelunasanForId(bookingId);
+    try {
+      const res = await apiFetch<any>('/payments/snap-token', {
+        method: 'POST',
+        body: JSON.stringify({
+          booking_id: bookingId,
+          is_final_payment: true,
+        }),
+      });
+      const paymentUrl = res.data?.payment_url;
+      if (paymentUrl) {
+        window.open(paymentUrl, '_blank');
+        loadMyBookings();
+      } else {
+        alert(locale === 'id' ? 'Gagal membuat link pelunasan.' : 'Failed to generate final payment link.');
+      }
+    } catch (err: any) {
+      console.error('Error generating pelunasan link:', err);
+      alert(err?.message || (locale === 'id' ? 'Terjadi kesalahan.' : 'An error occurred.'));
+    } finally {
+      setGeneratingPelunasanForId(null);
+    }
+  };
+
+  const handlePrintInvoice = () => {
+    window.print();
+  };
 
   const location = useLocation();
   const navigate = useNavigate();
@@ -267,6 +344,19 @@ export default function Navbar() {
                           <span className="font-medium">{locale === 'id' ? 'Edit Profil' : 'Edit Profile'}</span>
                         </button>
 
+                        {/* Lihat Pesanan Saya Menu Item */}
+                        <button
+                          onClick={() => {
+                            setShowMyBookingsModal(true);
+                            setUserMenuOpen(false);
+                            loadMyBookings();
+                          }}
+                          className="flex items-center gap-3 px-4 py-3 text-sm text-ocean-700 hover:bg-toska-50 transition-colors w-full text-left border-t border-ocean-50"
+                        >
+                          <Calendar className="w-4 h-4 text-toska-500" />
+                          <span className="font-medium">{locale === 'id' ? 'Lihat Pesanan Saya' : 'My Bookings'}</span>
+                        </button>
+
                         {/* Admin Panel Link */}
                         {isAdmin && (
                           <Link
@@ -440,6 +530,19 @@ export default function Navbar() {
                       <span>{locale === 'id' ? 'Edit Profil' : 'Edit Profile'}</span>
                     </button>
 
+                    {/* Mobile Lihat Pesanan Saya */}
+                    <button
+                      onClick={() => {
+                        setShowMyBookingsModal(true);
+                        setIsOpen(false);
+                        loadMyBookings();
+                      }}
+                      className="flex items-center gap-2 px-4 py-3 text-toska-600 hover:bg-toska-50 rounded-lg font-medium text-sm w-full text-left animate-pulse-slow"
+                    >
+                      <Calendar className="w-4 h-4" />
+                      <span>{locale === 'id' ? 'Lihat Pesanan Saya' : 'My Bookings'}</span>
+                    </button>
+
                     {isAdmin && (
                       <Link
                         to="/admin"
@@ -605,6 +708,388 @@ export default function Navbar() {
                   )}
                 </button>
               </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* 🧾 MY BOOKINGS MODAL */}
+      <AnimatePresence>
+        {showMyBookingsModal && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 print:hidden">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-white rounded-3xl w-full max-w-3xl max-h-[85vh] border border-ocean-100 shadow-2xl overflow-hidden flex flex-col"
+            >
+              {/* Header */}
+              <div className="px-6 py-5 bg-gradient-to-r from-ocean-900 to-slate-900 text-white flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-bold flex items-center gap-2">
+                    <Calendar className="w-5 h-5 text-toska-400" />
+                    {locale === 'id' ? 'Pesanan Saya' : 'My Bookings'}
+                  </h3>
+                  <p className="text-xs text-ocean-300 mt-0.5">
+                    {locale === 'id' ? 'Daftar riwayat pemesanan Anda' : 'Your travel and rental booking history'}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowMyBookingsModal(false)}
+                  className="p-1.5 hover:bg-white/10 rounded-lg text-ocean-300 hover:text-white transition-all"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="p-6 overflow-y-auto space-y-4 flex-1 bg-slate-50/50">
+                {myBookingsLoading ? (
+                  <div className="py-20 text-center">
+                    <div className="w-10 h-10 border-4 border-toska-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+                    <p className="text-sm text-slate-500 font-medium">
+                      {locale === 'id' ? 'Memuat riwayat pesanan...' : 'Retrieving booking history...'}
+                    </p>
+                  </div>
+                ) : myBookingsError ? (
+                  <div className="py-16 text-center max-w-md mx-auto">
+                    <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-3" />
+                    <p className="text-sm font-semibold text-slate-800">{myBookingsError}</p>
+                    <button
+                      onClick={loadMyBookings}
+                      className="mt-4 px-5 py-2 bg-toska-500 hover:bg-toska-600 text-white text-xs font-bold rounded-xl transition-all"
+                    >
+                      {locale === 'id' ? 'Coba Lagi' : 'Try Again'}
+                    </button>
+                  </div>
+                ) : myBookings.length === 0 ? (
+                  <div className="py-20 text-center max-w-sm mx-auto">
+                    <div className="w-16 h-16 bg-ocean-50 rounded-3xl flex items-center justify-center mx-auto mb-4">
+                      <Calendar className="w-8 h-8 text-toska-500" />
+                    </div>
+                    <h4 className="text-base font-bold text-ocean-900">
+                      {locale === 'id' ? 'Belum Ada Pesanan' : 'No Bookings Yet'}
+                    </h4>
+                    <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                      {locale === 'id'
+                        ? 'Anda belum melakukan pemesanan apa pun. Mulai jelajahi paket wisata kami!'
+                        : 'You haven\'t made any bookings yet. Start exploring our exciting tour packages!'}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {myBookings.map((booking: any) => {
+                      const isDP = booking.payment_type === 'DP';
+                      const hasBalance = (booking.remaining_balance ?? 0) > 0;
+                      
+                      return (
+                        <div
+                          key={booking.id}
+                          className="bg-white p-5 rounded-2xl border border-slate-200/80 hover:border-toska-200 shadow-sm transition-all space-y-4"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                            <div>
+                              <span className="text-xs font-mono font-bold text-slate-700 bg-slate-100 px-2.5 py-1 rounded-lg">
+                                {booking.booking_code}
+                              </span>
+                              <span className="text-xs text-slate-400 ml-2.5">
+                                {new Date(booking.created_at).toLocaleDateString(undefined, {
+                                  day: '2-digit',
+                                  month: 'short',
+                                  year: 'numeric'
+                                })}
+                              </span>
+                            </div>
+                            <div className="flex gap-2">
+                              {/* Payment Status Badge */}
+                              <span
+                                className={`text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-lg ${
+                                  booking.payment_status === 'paid'
+                                    ? 'bg-green-50 text-green-700 border border-green-200'
+                                    : booking.payment_status === 'partially_paid'
+                                    ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                    : booking.payment_status === 'pending'
+                                    ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                                    : 'bg-red-50 text-red-700 border border-red-200'
+                                }`}
+                              >
+                                {booking.payment_status === 'partially_paid'
+                                  ? (locale === 'id' ? 'DP Dibayar' : 'Partially Paid')
+                                  : booking.payment_status || 'unpaid'}
+                              </span>
+                              {/* Booking Status Badge */}
+                              <span
+                                className={`text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-lg ${
+                                  booking.status === 'confirmed' || booking.status === 'completed'
+                                    ? 'bg-emerald-500 text-white'
+                                    : booking.status === 'cancelled'
+                                    ? 'bg-slate-500 text-white'
+                                    : 'bg-amber-500 text-white'
+                                }`}
+                              >
+                                {booking.status || 'pending'}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                                {booking.booking_type === 'package' ? (locale === 'id' ? 'Paket Wisata' : 'Tour Package') : (locale === 'id' ? 'Sewa Mobil' : 'Car Rental')}
+                              </p>
+                              <h4 className="text-sm font-bold text-slate-900 mt-0.5">{booking.item_name}</h4>
+                              <div className="mt-2 space-y-1 text-xs text-slate-500">
+                                <p>🗓️ {booking.date} ({booking.duration})</p>
+                                <p>👤 {booking.customer?.name} ({booking.customer?.phone})</p>
+                              </div>
+                            </div>
+                            <div className="bg-slate-50 p-3.5 rounded-xl flex flex-col justify-between">
+                              <div className="flex justify-between items-center text-xs">
+                                <span className="text-slate-500">{locale === 'id' ? 'Total Harga' : 'Total Price'}</span>
+                                <span className="font-bold text-slate-900">Rp {parseFloat(booking.total_price).toLocaleString('id-ID')}</span>
+                              </div>
+                              {isDP && (
+                                <div className="mt-1 space-y-1 text-xs border-t border-slate-200/60 pt-1">
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-slate-500">{locale === 'id' ? 'Sudah Dibayar' : 'Paid amount'}</span>
+                                    <span className="font-semibold text-emerald-600">Rp {parseFloat(booking.amount_paid).toLocaleString('id-ID')}</span>
+                                  </div>
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-slate-500">{locale === 'id' ? 'Sisa Pelunasan' : 'Remaining Balance'}</span>
+                                    <span className="font-bold text-red-600">Rp {parseFloat(booking.remaining_balance).toLocaleString('id-ID')}</span>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Actions */}
+                          <div className="flex flex-wrap gap-2.5 justify-end pt-2 border-t border-slate-100">
+                            {/* Pay Now Button (Unpaid) */}
+                            {booking.payment_status === 'unpaid' && booking.payment_link && (
+                              <a
+                                href={booking.payment_link}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="px-4 py-2 bg-toska-500 hover:bg-toska-600 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-toska-500/10"
+                              >
+                                💳 {locale === 'id' ? 'Bayar Sekarang' : 'Pay Now'}
+                              </a>
+                            )}
+
+                            {/* Pay Pelunasan (Partially Paid) */}
+                            {booking.payment_status === 'partially_paid' && hasBalance && (
+                              <button
+                                onClick={() => payPelunasan(booking.id)}
+                                disabled={generatingPelunasanForId === booking.id}
+                                className="px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:bg-amber-300 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-amber-500/10"
+                              >
+                                {generatingPelunasanForId === booking.id ? (
+                                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin inline-block mr-1" />
+                                ) : '💳 '}
+                                {locale === 'id' ? 'Bayar Pelunasan' : 'Pay Balance'}
+                              </button>
+                            )}
+
+                            {/* Invoice Button (retrieved from Midtrans) */}
+                            {booking.order_id && (
+                              <button
+                                onClick={() => loadInvoiceFromMidtrans(booking)}
+                                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl transition-all flex items-center gap-1.5"
+                              >
+                                <FileText className="w-3.5 h-3.5" />
+                                {locale === 'id' ? 'Lihat Invoice' : 'View Invoice'}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end">
+                <button
+                  onClick={() => setShowMyBookingsModal(false)}
+                  className="px-5 py-2 rounded-xl border border-slate-200 text-slate-600 text-xs font-bold hover:bg-slate-100 transition-colors"
+                >
+                  {locale === 'id' ? 'Tutup' : 'Close'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* 🧾 MIDTRANS RETRIEVED INVOICE MODAL */}
+      <AnimatePresence>
+        {showInvoiceModal && selectedBookingForInvoice && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 print:bg-white print:p-0 print:absolute print:inset-0 print:z-50 overflow-y-auto">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl w-full max-w-2xl max-h-[90vh] shadow-2xl border border-slate-200 overflow-hidden flex flex-col print:max-h-none print:overflow-visible print:border-none print:shadow-none print:w-full"
+            >
+              {/* Modal controls - hidden in print */}
+              <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between print:hidden">
+                <span className="text-sm font-bold flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-toska-400" />
+                  {locale === 'id' ? 'Invoice Resmi Pembayaran' : 'Official Payment Invoice'}
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handlePrintInvoice}
+                    className="px-3.5 py-1.5 rounded-lg bg-toska-500 hover:bg-toska-600 text-white text-xs font-semibold transition-colors flex items-center gap-1.5"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    {locale === 'id' ? 'Cetak' : 'Print'}
+                  </button>
+                  <button
+                    onClick={() => setShowInvoiceModal(false)}
+                    className="p-1.5 hover:bg-white/10 rounded-lg text-slate-300 hover:text-white transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Printable Invoice Container */}
+              <div id="printable-invoice" className="p-8 space-y-6 bg-white text-slate-800 font-sans overflow-y-auto flex-1 print:overflow-visible print:p-0">
+                {/* Invoice Header */}
+                <div className="flex justify-between items-start border-b border-slate-200 pb-5">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center text-white">
+                      <Palmtree className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h2 className="text-base font-bold tracking-tight text-slate-900">ClickAndGo Journey</h2>
+                      <p className="text-[9px] text-slate-400 uppercase tracking-widest font-medium">Bali Travel & Rent</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">{t('invoice').toUpperCase()}</h1>
+                    <p className="text-[10px] text-slate-500 mt-0.5 font-mono">INV/{new Date().getFullYear()}/BOOK-{selectedBookingForInvoice.id}</p>
+                  </div>
+                </div>
+
+                {/* Company & Client Meta */}
+                <div className="grid grid-cols-2 gap-6 text-xs border-b border-slate-100 pb-5">
+                  <div>
+                    <h4 className="font-bold text-slate-900 uppercase tracking-wider mb-1.5">{locale === 'id' ? 'Diterbitkan Oleh' : 'Issued By'}</h4>
+                    <p className="font-bold text-slate-800">ClickAndGo Journey</p>
+                    <p className="text-slate-500">Jl. Danau Tondano IV/9A, Sanur, Bali</p>
+                    <p className="text-slate-500">WhatsApp: +62 812-4349-9265</p>
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-slate-900 uppercase tracking-wider mb-1.5">{locale === 'id' ? 'Ditujukan Kepada' : 'Billed To'}</h4>
+                    <p className="font-bold text-slate-800">{selectedBookingForInvoice.customer?.name || selectedBookingForInvoice.name}</p>
+                    <p className="text-slate-500">Email: {selectedBookingForInvoice.customer?.email || selectedBookingForInvoice.email}</p>
+                    <p className="text-slate-500">Phone: {selectedBookingForInvoice.customer?.phone || selectedBookingForInvoice.phone}</p>
+                  </div>
+                </div>
+
+                {/* Booking details */}
+                <div className="space-y-2">
+                  <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">{locale === 'id' ? 'Layanan Dipesan' : 'Ordered Service'}</h4>
+                  <div className="p-4 rounded-xl border border-slate-100 bg-slate-50/50 flex justify-between items-center text-xs">
+                    <div>
+                      <p className="font-bold text-slate-900">{selectedBookingForInvoice.item_name}</p>
+                      <p className="text-[10px] text-slate-400 mt-0.5">
+                        {selectedBookingForInvoice.booking_type === 'package' ? (locale === 'id' ? 'Paket Wisata' : 'Tour Package') : (locale === 'id' ? 'Sewa Mobil' : 'Car Rental')}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-semibold text-slate-700">{selectedBookingForInvoice.date}</p>
+                      <p className="text-[10px] text-slate-400 mt-0.5">{selectedBookingForInvoice.duration}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Midtrans Data (Retrieved from Midtrans) */}
+                <div className="space-y-2.5">
+                  <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                    <Check className="w-3.5 h-3.5 text-green-500" />
+                    {locale === 'id' ? 'Informasi Transaksi (Midtrans)' : 'Transaction Info (Midtrans)'}
+                  </h4>
+                  {invoiceLoading ? (
+                    <div className="py-6 text-center border border-dashed border-slate-200 rounded-xl bg-slate-50/30">
+                      <div className="w-6 h-6 border-2 border-toska-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                      <p className="text-[10px] text-slate-500">{locale === 'id' ? 'Mengambil data dari Midtrans...' : 'Fetching data from Midtrans...'}</p>
+                    </div>
+                  ) : invoiceData ? (
+                    <div className="border border-slate-100 rounded-xl overflow-hidden divide-y divide-slate-100 text-xs">
+                      <div className="grid grid-cols-2 p-3 bg-slate-50/55">
+                        <span className="text-slate-500">{locale === 'id' ? 'Status Transaksi' : 'Transaction Status'}</span>
+                        <span className="font-bold text-green-600 text-right uppercase">{invoiceData.transaction_status || '-'}</span>
+                      </div>
+                      <div className="grid grid-cols-2 p-3">
+                        <span className="text-slate-500">{locale === 'id' ? 'Metode Pembayaran' : 'Payment Method'}</span>
+                        <span className="font-semibold text-slate-800 text-right capitalize">{(invoiceData.payment_type || '').replace('_', ' ')}</span>
+                      </div>
+                      {invoiceData.va_numbers?.[0] && (
+                        <div className="grid grid-cols-2 p-3">
+                          <span className="text-slate-500">Virtual Account ({invoiceData.va_numbers[0].bank?.toUpperCase()})</span>
+                          <span className="font-mono font-bold text-slate-800 text-right">{invoiceData.va_numbers[0].va_number}</span>
+                        </div>
+                      )}
+                      {invoiceData.bca_va_number && (
+                        <div className="grid grid-cols-2 p-3">
+                          <span className="text-slate-500">BCA Virtual Account</span>
+                          <span className="font-mono font-bold text-slate-800 text-right">{invoiceData.bca_va_number}</span>
+                        </div>
+                      )}
+                      {invoiceData.permata_va_number && (
+                        <div className="grid grid-cols-2 p-3">
+                          <span className="text-slate-500">Permata Bank Transfer</span>
+                          <span className="font-mono font-bold text-slate-800 text-right">{invoiceData.permata_va_number}</span>
+                        </div>
+                      )}
+                      {invoiceData.bill_key && (
+                        <div className="grid grid-cols-2 p-3">
+                          <span className="text-slate-500">Mandiri Bill Key</span>
+                          <span className="font-mono font-bold text-slate-800 text-right">{invoiceData.bill_key}</span>
+                        </div>
+                      )}
+                      <div className="grid grid-cols-2 p-3">
+                        <span className="text-slate-500">{locale === 'id' ? 'Waktu Transaksi' : 'Transaction Time'}</span>
+                        <span className="font-medium text-slate-600 text-right">{invoiceData.transaction_time || '-'}</span>
+                      </div>
+                      <div className="grid grid-cols-2 p-3 bg-emerald-50/20 font-bold text-sm">
+                        <span className="text-slate-600">{locale === 'id' ? 'Jumlah Dibayar (Midtrans)' : 'Amount Paid (Midtrans)'}</span>
+                        <span className="text-slate-900 text-right">Rp {parseFloat(invoiceData.gross_amount || 0).toLocaleString('id-ID')}</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-4 rounded-xl bg-amber-50 border border-amber-100 text-amber-800 text-xs text-center">
+                      ⚠️ {locale === 'id' ? 'Gagal memuat status detail pembayaran langsung dari Midtrans.' : 'Unable to query payment gateway details from Midtrans.'}
+                    </div>
+                  )}
+                </div>
+
+                {/* Bottom Notice */}
+                <div className="text-[10px] text-slate-400 text-center pt-4 border-t border-slate-100">
+                  {locale === 'id'
+                    ? 'Terima kasih telah memesan bersama ClickAndGo Journey. Simpan halaman ini sebagai bukti pembayaran sah.'
+                    : 'Thank you for booking with ClickAndGo Journey. Keep this page as a valid proof of payment.'}
+                </div>
+              </div>
+
+              {/* Footer controls - hidden in print */}
+              <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-3 print:hidden">
+                <button
+                  onClick={() => setShowInvoiceModal(false)}
+                  className="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-xs font-bold hover:bg-slate-100 transition-colors"
+                >
+                  {locale === 'id' ? 'Tutup' : 'Close'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
             </motion.div>
           </div>
         )}
