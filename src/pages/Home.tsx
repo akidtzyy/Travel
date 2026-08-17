@@ -5,6 +5,7 @@ import { Star, ChevronDown, ChevronUp, Phone, CheckCircle, Car, Sparkles, Shield
 import Lenis from 'lenis';
 import Hero from '../components/Hero';
 import PackageCard from '../components/PackageCard';
+import PackageDetailModal from '../components/PackageDetailModal';
 import Footer from '../components/Footer';
 import PaymentModal, { type PaymentStep } from '../components/PaymentModal';
 import { openSnapPayment } from '../lib/midtrans';
@@ -99,6 +100,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [activeCategory, setActiveCategory] = useState('Semua');
+  const [activeDetailPkg, setActiveDetailPkg] = useState<TourPackage | null>(null);
 
   // Booking form
   const [bookingForm, setBookingForm] = useState({
@@ -729,7 +731,7 @@ export default function Home() {
                     : 'bg-ocean-50 text-ocean-700 hover:bg-ocean-100'
                   }`}
               >
-                {cat === 'Semua' ? t('all') : cat === 'Honeymoon' ? '💕 Honeymoon' : cat === '3D2N' ? '🌴 ' + translateText('3 Hari 2 Malam') : translateText(cat)}
+                {cat === 'Semua' ? t('all') : cat === 'Honeymoon' ? '💕 Honeymoon' : cat === '3D2N' ? '🌴 ' + translateText('3 Hari 2 Malam') : cat === '4D3N' ? '🌴 ' + translateText('4 Hari 3 Malam') : translateText(cat)}
               </button>
             ))}
           </div>
@@ -741,21 +743,8 @@ export default function Home() {
                 key={pkg.id}
                 pkg={pkg}
                 index={index}
-                onSelect={(selectedPkg, hotel, pax, price) => {
-                  setSelectedPkgId(selectedPkg.id);
-                  const hotelIdx = selectedPkg.included?.hotels?.findIndex(h => h.hotel === hotel) ?? -1;
-                  setSelectedHotelIdx(hotelIdx >= 0 ? hotelIdx : 0);
-                  setSelectedPaxKey(pax);
-                  setBookingForm(p => ({
-                    ...p,
-                    booking_type: 'package',
-                    item_name: `${translateText(selectedPkg.name)} — ${hotel}`,
-                    duration: paxLabels[pax] || pax,
-                    total_price: formatPrice(price)
-                  }));
-                  setTimeout(() => {
-                    document.getElementById('booking')?.scrollIntoView({ behavior: 'smooth' });
-                  }, 100);
+                onViewDetails={(selectedPkg) => {
+                  setActiveDetailPkg(selectedPkg);
                 }}
               />
             ))}
@@ -1589,6 +1578,29 @@ export default function Home() {
         onConfirm={handlePayNow}
         onClose={handleClosePaymentModal}
         locale={locale}
+      />
+
+      {/* Detail Modal */}
+      <PackageDetailModal
+        pkg={activeDetailPkg}
+        isOpen={activeDetailPkg !== null}
+        onClose={() => setActiveDetailPkg(null)}
+        onSelect={(selectedPkg, hotel, pax, price) => {
+          setSelectedPkgId(selectedPkg.id);
+          const hotelIdx = selectedPkg.included?.hotels?.findIndex(h => h.hotel === hotel) ?? -1;
+          setSelectedHotelIdx(hotelIdx >= 0 ? hotelIdx : 0);
+          setSelectedPaxKey(pax);
+          setBookingForm(p => ({
+            ...p,
+            booking_type: 'package',
+            item_name: `${translateText(selectedPkg.name)} — ${hotel}`,
+            duration: paxLabels[pax] || pax,
+            total_price: formatPrice(price)
+          }));
+          setTimeout(() => {
+            document.getElementById('booking')?.scrollIntoView({ behavior: 'smooth' });
+          }, 100);
+        }}
       />
 
       {/* Footer */}
