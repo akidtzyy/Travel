@@ -107,11 +107,19 @@ export default function PackageCard({ pkg, index, onViewDetails }: PackageCardPr
         </div>
 
         {/* Starting Price & CTA */}
-        <div className="flex items-center justify-between gap-4 pt-6 mt-6 border-t border-ocean-100 shrink-0">
-          <div>
-            <p className="text-xs text-ocean-500">{t('startingFrom')}</p>
-            <p className="text-2xl font-bold text-toska-600 font-[family-name:var(--font-display)]">{formatPrice(lowestPrice)}</p>
-            <p className="text-xs text-ocean-500">/{isHoneymoon ? t('couple') : t('pax')}</p>
+        <div className="flex items-center justify-between gap-4 pt-5 mt-5 border-t border-ocean-100 shrink-0">
+          <div className="space-y-0.5">
+            <p className={`text-[10px] font-semibold uppercase tracking-widest ${isHoneymoon ? 'text-pink-400' : 'text-toska-400'}`}>
+              {t('startingFrom')}
+            </p>
+            <div className="flex items-baseline gap-1">
+              <span className={`text-xl font-extrabold font-[family-name:var(--font-display)] ${isHoneymoon ? 'text-pink-600' : 'text-toska-600'}`}>
+                {formatPrice(lowestPrice)}
+              </span>
+              <span className="text-xs font-medium text-ocean-400">
+                /{isHoneymoon ? t('couple') : t('pax')}
+              </span>
+            </div>
           </div>
           
           <button
