@@ -697,6 +697,58 @@ const dbTranslations: Record<string, string> = {
   'Grand Puncak Sari Rest': 'Grand Puncak Sari Restaurant',
   'Shera Rest': 'Shera Restaurant',
 
+  // 5D4N Package Names & Descriptions
+  'Paket Putu': 'Putu Package',
+  'Paket Kadek': 'Kadek Package',
+  'Paket Komang': 'Komang Package',
+  '5 Hari 4 Malam': '5 Days 4 Nights',
+  '5D4N': '5D4N',
+  '5 Hari 4 Malam menjelajahi pesona Bali lengkap: Selatan, Tengah, Utara, hingga wisata alam dan kuliner otentik di setiap sudut pulau.': 'A full 5 Days 4 Nights exploring Bali: South, Central, North, with amazing nature and authentic culinary experiences in every corner of the island.',
+  '5 Hari 4 Malam menyelami Bali lengkap dengan destinasi Timur — Lempuyang, Tirta Gangga, dan Taman Ujung — plus kuliner terbaik di setiap persinggahan.': '5 Days 4 Nights exploring Bali including Eastern destinations — Lempuyang, Tirta Gangga, and Taman Ujung — plus the best culinary experiences at every stop.',
+  '5 Hari 4 Malam tur Bali paling lengkap: Selatan, Tengah, Timur, hingga petualangan seru di Nusa Penida dengan Kelingking Beach, Broken Beach, dan Crystal Bay.': 'The most complete 5 Days 4 Nights Bali tour: South, Central, East, and an exciting adventure in Nusa Penida featuring Kelingking Beach, Broken Beach, and Crystal Bay.',
+
+  // 5D4N Hotel Options
+  'J Kuta / Alron Kuta': 'J Kuta / Alron Kuta',
+  'Swissbell Express / Fame Kuta / Neo Jelantik / Sense Seminyak': 'Swissbell Express / Fame Kuta / Neo Jelantik / Sense Seminyak',
+  'J4': 'J4',
+  'J4 Kuta': 'J4 Kuta',
+  'Swissbell Express / Fame Kuta / Sense Seminyak': 'Swissbell Express / Fame Kuta / Sense Seminyak',
+
+  // 5D4N Itinerary Titles (unique ones only)
+  'Hari 4 — Bali Utara & Barat': 'Day 4 — North & West Bali',
+  'Hari 5 — Kepulangan': 'Day 5 — Departure',
+  'Hari 5 — Bali Timur & Kepulangan': 'Day 5 — East Bali & Departure',
+  'Hari 1 — Kedatangan & Bali Selatan': 'Day 1 — Arrival & South Bali',
+  'Hari 4 — Bali Timur': 'Day 4 — East Bali',
+  'Hari 5 — Nusa Penida & Kepulangan': 'Day 5 — Nusa Penida & Departure',
+
+  // 5D4N Activities (unique ones only)
+  'Drop ke hotel, check in': 'Hotel check-in, drop off',
+  'Makan malam seafood dg klapa muda Jimbaran — Aroma / Tepi Pantai / New Dewata Cafe': 'Seafood dinner with young coconut in Jimbaran — Aroma / Tepi Pantai / New Dewata Cafe',
+  'Makan malam seafood Jimbaran — Aroma Cafe / Tepi Pantai / BBC Cafe': 'Jimbaran Seafood dinner — Aroma Cafe / Tepi Pantai / BBC Cafe',
+  'Uma Ceking Rice Terrace': 'Uma Ceking Rice Terrace',
+  'Uma Ceking Tegalalang': 'Uma Ceking Tegalalang Rice Terraces',
+  'Makan siang Ulundanu Rest': 'Lunch at Ulun Danu Restaurant',
+  'Makan malam Betutu Bu Mira': 'Dinner at Betutu Bu Mira',
+  'Drop airport, check out': 'Check out & airport drop-off',
+  'Tirta Gangga': 'Tirta Gangga Water Palace',
+  'Makan siang Le Grande Rest': 'Lunch at Le Grande Restaurant',
+  'Taman Ujung': 'Taman Ujung Karangasem',
+  'Makan malam Dwika Rest': 'Dinner at Dwika Restaurant',
+  'Nusa Penida — Kelingking Beach': 'Nusa Penida — Kelingking Beach',
+  'Angle Bilabong': 'Angel Billabong',
+  'Makan siang BMS Rest': 'Lunch at BMS Restaurant',
+  'Makan malam Seribu Rempah Rest': 'Dinner at Seribu Rempah Restaurant',
+
+  // 5D4N Highlights (unique ones only)
+  'Sangeh & Bedugul': 'Sangeh & Bedugul Highlands',
+  'Lempuyang Temple': 'Pura Lempuyang (Gate of Heaven)',
+  'Makan Malam Betutu Bu Mira': 'Betutu Bu Mira Dinner',
+
+  // 5D4N Includes
+  'Hotel 4 malam sekamar berdua dengan sarapan': '4 nights hotel (double sharing) with breakfast',
+  'Transport AC: 2-4 pax Xpander sejenis (tanpa guide), 6-14 pax Hiace (tanpa guide), 15+ pax Bus Medium (dengan guide HPI)': 'AC Transport: 2-4 pax Xpander (no guide), 6-14 pax Hiace (no guide), 15+ pax Medium Bus (with HPI guide)',
+
   // Excludes
   'Tiket pesawat': 'Flight tickets',
   'Porter': 'Porter service',

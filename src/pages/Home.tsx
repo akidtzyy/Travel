@@ -731,7 +731,7 @@ export default function Home() {
                     : 'bg-ocean-50 text-ocean-700 hover:bg-ocean-100'
                   }`}
               >
-                {cat === 'Semua' ? t('all') : cat === 'Honeymoon' ? '💕 Honeymoon' : cat === '3D2N' ? '🌴 ' + translateText('3 Hari 2 Malam') : cat === '4D3N' ? '🌴 ' + translateText('4 Hari 3 Malam') : translateText(cat)}
+                {cat === 'Semua' ? t('all') : cat === 'Honeymoon' ? '💕 Honeymoon' : cat === '3D2N' ? '🌴 ' + translateText('3 Hari 2 Malam') : cat === '4D3N' ? '🌴 ' + translateText('4 Hari 3 Malam') : cat === '5D4N' ? '🗺️ ' + translateText('5 Hari 4 Malam') : translateText(cat)}
               </button>
             ))}
           </div>
