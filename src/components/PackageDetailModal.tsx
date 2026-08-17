@@ -88,6 +88,24 @@ export default function PackageDetailModal({ pkg, isOpen, onClose, onSelect }: P
     }
   }, [pkg, isOpen]);
 
+  // Lock background body scroll when modal is open
+  useEffect(() => {
+    if (isOpen) {
+      const scrollY = window.scrollY;
+      document.body.style.overflow = 'hidden';
+      document.body.style.position = 'fixed';
+      document.body.style.top = `-${scrollY}px`;
+      document.body.style.width = '100%';
+      return () => {
+        document.body.style.overflow = '';
+        document.body.style.position = '';
+        document.body.style.top = '';
+        document.body.style.width = '';
+        window.scrollTo(0, scrollY);
+      };
+    }
+  }, [isOpen]);
+
   if (!pkg) return null;
 
   const isHoneymoon = pkg.category === 'Honeymoon';
@@ -126,7 +144,10 @@ export default function PackageDetailModal({ pkg, isOpen, onClose, onSelect }: P
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-x-hidden overflow-y-auto outline-none focus:outline-none p-4 sm:p-6">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
+          onWheel={(e) => e.stopPropagation()}
+        >
           {/* Backdrop */}
           <motion.div
             initial={{ opacity: 0 }}
@@ -187,7 +208,10 @@ export default function PackageDetailModal({ pkg, isOpen, onClose, onSelect }: P
             </div>
 
             {/* Scrollable Contents Grid */}
-            <div className="overflow-y-auto p-6 sm:p-8 flex-1 grid grid-cols-1 lg:grid-cols-12 gap-8 scrollbar-thin">
+            <div
+              className="overflow-y-auto overscroll-contain p-6 sm:p-8 flex-1 grid grid-cols-1 lg:grid-cols-12 gap-8 scrollbar-thin"
+              onWheel={(e) => e.stopPropagation()}
+            >
               {/* Left Side: Itinerary, Details (7 Cols) */}
               <div className="lg:col-span-7 space-y-6">
                 
